@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: #fffdf0; padding: 20px; }
+.row { display: flex; gap: 10px; margin-bottom: 10px; }
+.swatch {
+  flex: 1; height: 80px; border-radius: 8px;
+  border: 1.5px solid rgba(24,24,60,0.12);
+  display: flex; flex-direction: column; justify-content: flex-end; padding: 8px 10px;
+}
+.swatch-label { font-size: 11px; font-weight: 500; line-height: 1.3; }
+.swatch-hex { font-size: 10px; opacity: 0.65; margin-top: 2px; }
+.section-title { font-size: 11px; font-weight: 500; color: #9090b0; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+</style>
+</head><body>
+<div class="section-title" style="margin-bottom:8px">Yellow Scale</div>
+<div class="row">
+  <div class="swatch" style="background:#fffdf0;"><span class="swatch-label">yellow-50</span><span class="swatch-hex">#fffdf0</span></div>
+  <div class="swatch" style="background:#fef9d4;"><span class="swatch-label">yellow-100</span><span class="swatch-hex">#fef9d4</span></div>
+  <div class="swatch" style="background:#fdf3a8;"><span class="swatch-label">yellow-200</span><span class="swatch-hex">#fdf3a8</span></div>
+  <div class="swatch" style="background:#fae278; border: 2px solid rgba(200,160,0,0.3);"><span class="swatch-label">yellow-300 ★</span><span class="swatch-hex">#fae278</span></div>
+  <div class="swatch" style="background:#f7ce42;"><span class="swatch-label">yellow-400</span><span class="swatch-hex">#f7ce42</span></div>
+  <div class="swatch" style="background:#e8b800;"><span class="swatch-label" style="color:#fff">yellow-500</span><span class="swatch-hex" style="color:#fff">#e8b800</span></div>
+</div>
+<div class="section-title">Blue Scale</div>
+<div class="row">
+  <div class="swatch" style="background:#f0f3ff;"><span class="swatch-label">blue-50</span><span class="swatch-hex">#f0f3ff</span></div>
+  <div class="swatch" style="background:#dce3fe;"><span class="swatch-label">blue-100</span><span class="swatch-hex">#dce3fe</span></div>
+  <div class="swatch" style="background:#b8c6fd;"><span class="swatch-label">blue-200</span><span class="swatch-hex">#b8c6fd</span></div>
+  <div class="swatch" style="background:#7890fa; border: 2px solid rgba(90,116,248,0.4);"><span class="swatch-label" style="color:#fff">blue-300 ★</span><span class="swatch-hex" style="color:#fff">#7890fa</span></div>
+  <div class="swatch" style="background:#5a74f8;"><span class="swatch-label" style="color:#fff">blue-400</span><span class="swatch-hex" style="color:#fff">#5a74f8</span></div>
+  <div class="swatch" style="background:#3a56f4;"><span class="swatch-label" style="color:#fff">blue-500</span><span class="swatch-hex" style="color:#fff">#3a56f4</span></div>
+</div>
+</body></html>

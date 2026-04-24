@@ -1,0 +1,16 @@
+.next
+.vercel
+.codex-tmp
+node_modules
+coverage
+buildersvault-hackathon-kit
+design/assets
+design/fonts
+design/uploads
+mealflo-icons
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico

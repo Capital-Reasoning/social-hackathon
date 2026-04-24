@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #fffdf0; padding: 20px; font-family: 'DM Sans', sans-serif; }
+.section { margin-bottom: 16px; }
+.label { font-size: 11px; font-weight: 500; color: #4e4e72; margin-bottom: 5px; }
+.field {
+  width: 100%; height: 48px; border-radius: 8px;
+  border: 1.5px solid rgba(24,24,60,0.14);
+  background: #fff; padding: 0 14px;
+  font-family: 'DM Sans', sans-serif; font-size: 16px; color: #1c1c2e;
+  outline: none;
+}
+.field::placeholder { color: #9090b0; }
+.field-focused { border: 2px solid rgba(120,144,250,0.5); }
+.field-error { border: 1.5px solid #e05050; background: #fff8f8; }
+.field-disabled { background: #f4f0e0; color: #9090b0; border-color: rgba(24,24,60,0.08); }
+.helper { font-size: 12px; margin-top: 4px; color: #9090b0; }
+.helper.error { color: #e05050; }
+.row { display: flex; gap: 12px; }
+.col { flex: 1; }
+.select-wrap { position: relative; }
+.select-wrap::after { content: '▾'; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: #9090b0; pointer-events: none; font-size: 13px; }
+select.field { appearance: none; cursor: pointer; }
+textarea.field { height: auto; padding: 12px 14px; resize: vertical; min-height: 80px; line-height: 1.5; }
+</style></head><body>
+
+<div class="row">
+  <div class="col section">
+    <div class="label">Recipient name</div>
+    <input class="field" type="text" value="Margaret Okafor">
+    <div class="helper">Legal name as on file</div>
+  </div>
+  <div class="col section">
+    <div class="label">Phone number</div>
+    <input class="field field-focused" type="text" placeholder="(555) 000-0000">
+    <div class="helper">Focused state</div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col section">
+    <div class="label">Delivery address</div>
+    <input class="field field-error" type="text" value="123 Main">
+    <div class="helper error">Please enter a full address including city</div>
+  </div>
+  <div class="col section">
+    <div class="label">Route assignment</div>
+    <div class="select-wrap">
+      <select class="field">
+        <option>North Side Route</option>
+        <option>East District</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col section">
+    <div class="label">Dietary notes (disabled)</div>
+    <input class="field field-disabled" disabled type="text" value="Nut allergy — see file">
+  </div>
+  <div class="col section">
+    <div class="label">Special instructions</div>
+    <textarea class="field" placeholder="e.g. Use side entrance, ring bell twice"></textarea>
+  </div>
+</div>
+
+</body></html>

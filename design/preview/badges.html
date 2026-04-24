@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+@font-face { font-family:'DM Sans'; src:url('../fonts/DMSans-VariableFont_opsz_wght.ttf') format('truetype'); font-weight:100 900; font-style:normal; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:#fffdf0; padding:20px; font-family:'DM Sans',sans-serif; }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+.badge {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 12px; border-radius:999px;
+  font-size:13px; font-weight:600;
+}
+.badge img { width:16px; height:16px; object-fit:contain; }
+.dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.chip {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px; border-radius:6px;
+  font-size:12px; font-weight:500; border:1.5px solid rgba(24,24,60,0.13);
+  background:#fff;
+}
+.chip img { width:14px; height:14px; object-fit:contain; }
+.section-label { font-size:10px; font-weight:500; color:#9090b0; letter-spacing:0.08em; text-transform:uppercase; width:100%; }
+</style></head><body>
+
+<div class="row">
+  <span class="section-label">Status badges (pill)</span>
+  <!-- success: #1e6b3e on #edfaf3 = 5.4:1 ✓ -->
+  <span class="badge" style="background:#edfaf3; color:#1e6b3e; border:1.5px solid #b0e8c6">
+    <img src="../assets/icons/checkmark-circle.png" alt="">Delivered
+  </span>
+  <!-- info: #2038c0 on #f0f3ff = 5.9:1 ✓ -->
+  <span class="badge" style="background:#f0f3ff; color:#2038c0; border:1.5px solid #c0ceff">
+    <span class="dot" style="background:#7890fa"></span>In progress
+  </span>
+  <!-- warning: #7a4f00 on #fff8eb = 5.2:1 ✓ -->
+  <span class="badge" style="background:#fff8eb; color:#7a4f00; border:1.5px solid #fce0a0">
+    <img src="../assets/icons/warning-alert.png" alt="">Delayed
+  </span>
+  <!-- error: #9b1c1c on #fff0f0 = 6.1:1 ✓ -->
+  <span class="badge" style="background:#fff0f0; color:#9b1c1c; border:1.5px solid #fcc0c0">
+    <img src="../assets/icons/close-x.png" alt="">Missed
+  </span>
+  <span class="badge" style="background:#f0ede0; color:#4a4a60; border:1.5px solid rgba(24,24,60,0.12)">
+    Not started
+  </span>
+</div>
+
+<div class="row">
+  <span class="section-label">Dietary / attribute chips</span>
+  <span class="chip" style="background:#fff8eb; border-color:#fce0a0; color:#7a4f00">
+    <img src="../assets/icons/warning-alert.png" alt="">Nut allergy
+  </span>
+  <span class="chip" style="background:#edfaf3; border-color:#b0e8c6; color:#1e6b3e">
+    <img src="../assets/icons/shield-check.png" alt="">Diabetic-friendly
+  </span>
+  <span class="chip" style="background:#f0f3ff; border-color:#c0ceff; color:#2038c0">
+    <img src="../assets/icons/snowflake.png" alt="">Dairy-free
+  </span>
+  <span class="chip">Low sodium</span>
+  <span class="chip">Soft foods only</span>
+</div>
+
+<div class="row">
+  <span class="section-label">Count / number badges</span>
+  <span style="background:#3d5cf5; color:#fff; font-size:12px; font-weight:700; border-radius:999px; padding:3px 9px; font-family:'DM Sans',sans-serif">12</span>
+  <span style="background:#9b1c1c; color:#fff; font-size:12px; font-weight:700; border-radius:999px; padding:3px 9px; font-family:'DM Sans',sans-serif">3</span>
+  <span style="background:#7a4f00; color:#fff; font-size:12px; font-weight:700; border-radius:999px; padding:3px 9px; font-family:'DM Sans',sans-serif">!</span>
+  <span style="background:#fae278; color:#1c1c2e; font-size:12px; font-weight:700; border-radius:999px; padding:3px 9px; font-family:'DM Sans',sans-serif; border:1.5px solid rgba(170,120,0,0.35)">New</span>
+</div>
+
+<div class="row">
+  <span class="section-label">Square / rounded tags</span>
+  <span style="background:#fae278; color:#1c1c2e; font-size:12px; font-weight:600; border-radius:4px; padding:3px 8px; font-family:'DM Sans',sans-serif; border:1.5px solid rgba(170,120,0,0.35)">Today</span>
+  <span style="background:#fff; color:#1c1c2e; font-size:12px; font-weight:500; border-radius:4px; padding:3px 8px; font-family:'DM Sans',sans-serif; border:1.5px solid rgba(24,24,60,0.14)">North Side</span>
+  <span style="background:#f0f3ff; color:#2038c0; font-size:12px; font-weight:600; border-radius:4px; padding:3px 8px; font-family:'DM Sans',sans-serif; border:1.5px solid #c0ceff">Stop #7</span>
+</div>
+
+</body></html>

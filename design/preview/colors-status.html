@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: #fffdf0; padding: 20px; }
+.row { display: flex; gap: 12px; }
+.status-card {
+  flex: 1; background: #fff; border-radius: 10px;
+  border: 1.5px solid rgba(24,24,60,0.13); padding: 14px 16px;
+}
+.dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; margin-right: 6px; }
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; margin-bottom: 8px;
+}
+.status-label { font-size: 13px; font-weight: 600; color: #1c1c2e; margin-bottom: 2px; }
+.status-desc { font-size: 11px; color: #9090b0; }
+</style></head><body>
+<div class="row">
+  <div class="status-card">
+    <div class="badge" style="background:#edfaf3; color:#2e8a50; border:1.5px solid #c8f0d8">
+      <span class="dot" style="background:#4ead6f"></span>Delivered
+    </div>
+    <div class="status-label">Success</div>
+    <div class="status-desc">#4ead6f · bg #edfaf3</div>
+  </div>
+  <div class="status-card">
+    <div class="badge" style="background:#fff8eb; color:#c47d00; border:1.5px solid #fde8b0">
+      <span class="dot" style="background:#f0a830"></span>Dietary Note
+    </div>
+    <div class="status-label">Warning</div>
+    <div class="status-desc">#f0a830 · bg #fff8eb</div>
+  </div>
+  <div class="status-card">
+    <div class="badge" style="background:#fff0f0; color:#b52828; border:1.5px solid #fdd0d0">
+      <span class="dot" style="background:#e05050"></span>Missed Stop
+    </div>
+    <div class="status-label">Error</div>
+    <div class="status-desc">#e05050 · bg #fff0f0</div>
+  </div>
+  <div class="status-card">
+    <div class="badge" style="background:#f0f3ff; color:#3a56f4; border:1.5px solid #dce3fe">
+      <span class="dot" style="background:#7890fa"></span>In Progress
+    </div>
+    <div class="status-label">Info / Action</div>
+    <div class="status-desc">#7890fa · bg #f0f3ff</div>
+  </div>
+</div>
+</body></html>

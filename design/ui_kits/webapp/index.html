@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mealflo — Coordinator Dashboard</title>
+<style>
+@font-face { font-family:'Outfit'; src:url('../../fonts/Outfit-VariableFont_wght.ttf') format('truetype'); font-weight:100 900; font-display:swap; }
+@font-face { font-family:'DM Sans'; src:url('../../fonts/DMSans-VariableFont_opsz_wght.ttf') format('truetype'); font-weight:100 900; font-style:normal; font-display:swap; }
+@font-face { font-family:'DM Sans'; src:url('../../fonts/DMSans-Italic-VariableFont_opsz_wght.ttf') format('truetype'); font-weight:100 900; font-style:italic; font-display:swap; }
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+html, body, #root { height:100%; }
+body { font-family:'DM Sans',sans-serif; background:#fffdf0; color:#1c1c2e; -webkit-font-smoothing:antialiased; }
+button { font-family:inherit; }
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-thumb { background:rgba(24,24,60,0.15); border-radius:999px; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="Header.jsx"></script>
+<script type="text/babel" src="RouteCard.jsx"></script>
+<script type="text/babel" src="RecipientList.jsx"></script>
+<script type="text/babel">
+
+// ── DATA ────────────────────────────────────────────────
+const ROUTES = [
+  { id:1, name:'North Side Route', stops:12, driver:'Rosa M.',  status:'on-track',    delivered:8,  remaining:4, missed:0, eta:'2:15 PM' },
+  { id:2, name:'East District',    stops:9,  driver:'James T.', status:'delayed',     delivered:3,  remaining:6, missed:0, eta:'3:40 PM' },
+  { id:3, name:'Westview Loop',    stops:7,  driver:null,       status:'not-started', delivered:0,  remaining:7, missed:0, eta:'—' },
+  { id:4, name:'South Harbor',     stops:11, driver:'Pat K.',   status:'complete',    delivered:11, remaining:0, missed:0, eta:'Done' },
+];
+const RECIPIENTS = [
+  { id:1, name:'Margaret Okafor', address:'231 Oak Ave, Apt 3',    stop:7,  status:'delivered', diets:['nut'],              avatarColor:'#fae278' },
+  { id:2, name:'Robert Chen',     address:'88 Maple Street',       stop:2,  status:'delivered', diets:['diabetic','sodium'], avatarColor:'#dce3fe' },
+  { id:3, name:'Dolores Fuentes', address:'14 Birch Ct, Unit B',   stop:5,  status:'pending',   diets:['dairy'],            avatarColor:'#edfaf3' },
+  { id:4, name:'Henry Baxter',    address:'402 Elm Road',          stop:9,  status:'pending',   diets:['soft'],             avatarColor:'#fdf3a8' },
+  { id:5, name:'Shirley Nguyen',  address:'55 Cedar Lane, Apt 1F', stop:11, status:'missed',    diets:[],                   avatarColor:'#fdd0d0' },
+  { id:6, name:'Walter Kowalski', address:'7 Spruce Blvd',         stop:3,  status:'delivered', diets:['sodium','diabetic'],avatarColor:'#dce3fe' },
+];
+const VOLUNTEERS = [
+  { id:1, name:'Rosa Martinez', route:'North Side Route', stops:12, status:'active',    phone:'(555) 210-4401' },
+  { id:2, name:'James Tran',    route:'East District',    stops:9,  status:'delayed',   phone:'(555) 388-2290' },
+  { id:3, name:'Pat Kim',       route:'South Harbor',     stops:11, status:'complete',  phone:'(555) 904-1123' },
+  { id:4, name:'Amara Diallo',  route:'Unassigned',       stops:0,  status:'available', phone:'(555) 671-0034' },
+  { id:5, name:'Glen Porter',   route:'Unassigned',       stops:0,  status:'available', phone:'(555) 420-8812' },
+];
+
+// ── SHARED ───────────────────────────────────────────────
+const Icon = ({ name, size=22, alt='' }) => (
+  <img src={IC(name)} alt={alt} style={{ width:size, height:size, objectFit:'contain', flexShrink:0 }} />
+);
+
+const S = {
+  page:  { display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden' },
+  body:  { display:'flex', flex:1, overflow:'hidden' },
+  main:  { flex:1, overflowY:'auto', padding:'28px 32px', background:'#fffdf0' },
+  title: { fontFamily:"'Outfit',sans-serif", fontSize:28, fontWeight:700, color:'#1c1c2e', letterSpacing:'-0.02em', marginBottom:4 },
+  sub:   { fontSize:14, color:'#4a4a60', marginBottom:22 },
+  secTitle: { fontFamily:"'Outfit',sans-serif", fontSize:18, fontWeight:600, color:'#1c1c2e', marginBottom:14 },
+  card:  { background:'#fff', borderRadius:12, border:'1.5px solid rgba(24,24,60,0.13)', padding:'20px 22px' },
+  btn: { display:'inline-flex', alignItems:'center', justifyContent:'center', gap:8, height:44, padding:'0 18px', borderRadius:8, border:'1.5px solid rgba(24,24,60,0.14)', fontFamily:"'DM Sans',sans-serif", fontSize:14, fontWeight:600, cursor:'pointer', background:'#fff', color:'#1c1c2e', transition:'transform 120ms' },
+  btnP:  { background:'#3d5cf5', color:'#fff', borderColor:'#3d5cf5' },
+  btnY:  { background:'#fae278', color:'#1c1c2e', borderColor:'rgba(170,120,0,0.35)' },
+  btnSm: { height:36, padding:'0 14px', fontSize:13, borderRadius:6 },
+  badge: { display:'inline-flex', alignItems:'center', gap:6, padding:'4px 12px', borderRadius:999, fontSize:12, fontWeight:600 },
+};
+
+// ── KPI CARD ─────────────────────────────────────────────
+const KpiCard = ({ num, label, color='#1c1c2e', sublabel, icon }) => (
+  <div style={{ ...S.card, flex:1, display:'flex', flexDirection:'column', gap:6, padding:'18px 20px' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+      <Icon name={icon} size={36} />
+      <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:36, fontWeight:700, lineHeight:1, color }}>{num}</div>
+    </div>
+    <div style={{ fontSize:13, color:'#4a4a60', fontWeight:500 }}>{label}</div>
+    {sublabel && <div style={{ fontSize:11, color:'#6a6a80' }}>{sublabel}</div>}
+  </div>
+);
+
+// ── ALERT ────────────────────────────────────────────────
+const Alert = ({ message, action, onAction }) => (
+  <div style={{ background:'#fff8eb', border:'1.5px solid #fce0a0', borderRadius:10, padding:'14px 18px', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:22 }}>
+    <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+      <Icon name="warning-alert.png" size={28} />
+      <span style={{ fontSize:14, color:'#1c1c2e', fontWeight:500 }}>{message}</span>
+    </div>
+    {action && <button onClick={onAction} style={{ ...S.btn, ...S.btnP, ...S.btnSm }}>{action}</button>}
+  </div>
+);
+
+// ── DASHBOARD ─────────────────────────────────────────────
+const Dashboard = ({ onNav }) => {
+  const [sel, setSel] = React.useState(null);
+  return (
+    <div style={S.main}>
+      <div style={S.title}>Good morning, Sarah</div>
+      <div style={S.sub}>Tuesday, April 22 — 4 routes active today</div>
+      <Alert message="Westview Loop has no driver assigned for today." action="Assign driver" onAction={() => onNav('volunteers')} />
+      <div style={{ display:'flex', gap:12, marginBottom:26 }}>
+        <KpiCard num="39" label="Total deliveries"   sublabel="Across 4 routes" color="#1c1c2e" icon="meal-container.png" />
+        <KpiCard num="22" label="Delivered"          sublabel="56% complete"    color="#1e6b3e" icon="checkmark-circle.png" />
+        <KpiCard num="17" label="Remaining"                                     color="#7a4f00" icon="clock.png" />
+        <KpiCard num="0"  label="Missed stops"                                  color="#4a4a60" icon="flag.png" />
+        <KpiCard num="23" label="Active volunteers"                             color="#2038c0" icon="group.png" />
+      </div>
+      <div style={S.secTitle}>Today's routes</div>
+      {ROUTES.map(r => <RouteCard key={r.id} route={r} onSelect={setSel} selected={sel===r.id} />)}
+    </div>
+  );
+};
+
+// ── ROUTES ────────────────────────────────────────────────
+const Routes = () => {
+  const [sel, setSel] = React.useState(1);
+  const route = ROUTES.find(r => r.id === sel);
+  const stMap = {
+    delivered: { bg:'#edfaf3', border:'#b0e8c6', icon:'checkmark-circle.png', color:'#1e6b3e' },
+    pending:   { bg:'#f0f3ff', border:'#c0ceff', icon:'clock.png',            color:'#2038c0' },
+    missed:    { bg:'#fff0f0', border:'#fcc0c0', icon:'flag.png',             color:'#9b1c1c' },
+  };
+
+  return (
+    <div style={{ ...S.main, display:'flex', gap:20 }}>
+      <div style={{ width:330, flexShrink:0 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+          <div style={S.secTitle}>Routes</div>
+          <button style={{ ...S.btn, ...S.btnY, ...S.btnSm }}>
+            <Icon name="plus.png" size={16} />New route
+          </button>
+        </div>
+        {ROUTES.map(r => <RouteCard key={r.id} route={r} onSelect={setSel} selected={sel===r.id} />)}
+      </div>
+
+      {route && (
+        <div style={{ flex:1 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
+            <div>
+              <div style={S.title}>{route.name}</div>
+              <div style={S.sub}>{route.stops} stops · Driver: <strong style={{ color:route.driver?'#1c1c2e':'#9b1c1c' }}>{route.driver||'Unassigned'}</strong></div>
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button style={S.btn}><Icon name="pencil-edit.png" size={18} />Edit route</button>
+              <button style={{ ...S.btn, ...S.btnP }}><Icon name="phone-handset.png" size={18} />Contact driver</button>
+            </div>
+          </div>
+
+          <div style={S.card}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:16, fontWeight:600, color:'#1c1c2e' }}>Stop list</div>
+              <button style={{ ...S.btn, ...S.btnSm }}><Icon name="filter-sliders.png" size={16} />Filter</button>
+            </div>
+            {RECIPIENTS.map((r, i) => {
+              const st = stMap[r.status] || stMap.pending;
+              return (
+                <div key={r.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 0', borderBottom: i<RECIPIENTS.length-1?'1.5px solid rgba(24,24,60,0.07)':'none' }}>
+                  <div style={{ width:36, height:36, borderRadius:999, background:st.bg, border:`1.5px solid ${st.border}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <Icon name={st.icon} size={20} />
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14, fontWeight:600, color:'#1c1c2e' }}>{r.name}</div>
+                    <div style={{ fontSize:12, color:'#6a6a80', display:'flex', alignItems:'center', gap:5, marginTop:2 }}>
+                      <Icon name="location-pin.png" size={13} />{r.address}
+                    </div>
+                  </div>
+                  {r.diets.length > 0 && (
+                    <span style={{ fontSize:11, background:'#fff8eb', color:'#7a4f00', border:'1.5px solid #fce0a0', borderRadius:4, padding:'3px 8px', fontWeight:600, display:'flex', alignItems:'center', gap:5 }}>
+                      <Icon name="allergy-peanut.png" size={14} />Dietary note
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── RECIPIENTS ────────────────────────────────────────────
+const Recipients = () => {
+  const [sel, setSel] = React.useState(null);
+  const dietMap = {
+    nut:      { bg:'#fff8eb', color:'#7a4f00', border:'#fce0a0', label:'Nut allergy',       icon:'allergy-peanut.png' },
+    dairy:    { bg:'#f0f3ff', color:'#2038c0', border:'#c0ceff', label:'Dairy-free',         icon:'snowflake.png' },
+    diabetic: { bg:'#edfaf3', color:'#1e6b3e', border:'#b0e8c6', label:'Diabetic-friendly',  icon:'shield-check.png' },
+    sodium:   { bg:'#f0ede0', color:'#4a4a60', border:'#dddac8', label:'Low sodium',         icon:'fork-knife.png' },
+    soft:     { bg:'#f0ede0', color:'#4a4a60', border:'#dddac8', label:'Soft foods',         icon:'fork-knife.png' },
+  };
+  const stIcon = { delivered:'checkmark-circle.png', missed:'flag.png', pending:'clock.png' };
+  const stColor = { delivered:'#1e6b3e', missed:'#9b1c1c', pending:'#4a4a60' };
+
+  return (
+    <div style={{ ...S.main, display:'flex', gap:20 }}>
+      <div style={{ flex:1 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+          <div style={S.title}>Recipients</div>
+          <button style={{ ...S.btn, ...S.btnY }}>
+            <Icon name="person-plus.png" size={20} />Add recipient
+          </button>
+        </div>
+        <RecipientList recipients={RECIPIENTS} onSelect={setSel} />
+      </div>
+
+      {sel ? (
+        <div style={{ width:310, flexShrink:0 }}>
+          <div style={S.card}>
+            <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:18 }}>
+              <div style={{ width:56, height:56, borderRadius:999, background:sel.avatarColor||'#fae278', border:'1.5px solid rgba(24,24,60,0.1)', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'DM Sans',sans-serif", fontSize:20, fontWeight:700, color:'#1c1c2e', flexShrink:0 }}>
+                {sel.name.split(' ').map(n=>n[0]).join('').slice(0,2)}
+              </div>
+              <div>
+                <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:18, fontWeight:700, color:'#1c1c2e' }}>{sel.name}</div>
+                <div style={{ fontSize:13, color:'#4a4a60', display:'flex', alignItems:'center', gap:5, marginTop:3 }}>
+                  <Icon name="route-stops.png" size={15} />Stop #{sel.stop}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontSize:11, color:'#6a6a80', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:500, marginBottom:7 }}>Address</div>
+            <div style={{ fontSize:15, color:'#1c1c2e', marginBottom:16, display:'flex', gap:8 }}>
+              <Icon name="location-pin.png" size={20} />{sel.address}
+            </div>
+
+            {sel.diets.length > 0 && (
+              <>
+                <div style={{ fontSize:11, color:'#6a6a80', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:500, marginBottom:7 }}>Dietary flags</div>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
+                  {sel.diets.map(d => {
+                    const dc = dietMap[d]; if (!dc) return null;
+                    return (
+                      <span key={d} style={{ background:dc.bg, color:dc.color, border:`1.5px solid ${dc.border}`, borderRadius:4, fontSize:12, fontWeight:600, padding:'4px 9px', display:'inline-flex', alignItems:'center', gap:6 }}>
+                        <Icon name={dc.icon} size={15} />{dc.label}
+                      </span>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            <div style={{ fontSize:11, color:'#6a6a80', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:500, marginBottom:7 }}>Today's status</div>
+            <div style={{ fontSize:15, fontWeight:600, color:stColor[sel.status]||'#4a4a60', marginBottom:20, display:'flex', alignItems:'center', gap:8 }}>
+              <Icon name={stIcon[sel.status]||'clock.png'} size={22} />
+              {sel.status==='delivered'?'Delivered':sel.status==='missed'?'Missed':'Pending delivery'}
+            </div>
+
+            <div style={{ display:'flex', gap:8 }}>
+              <button style={{ ...S.btn, ...S.btnP, flex:1 }}><Icon name="pencil-edit.png" size={18} />Edit</button>
+              <button style={{ ...S.btn, flex:1 }}><Icon name="phone-handset.png" size={18} />Call</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ width:280, display:'flex', alignItems:'center', justifyContent:'center', color:'#6a6a80', fontSize:14, textAlign:'center', flexDirection:'column', gap:14 }}>
+          <Icon name="checklist.png" size={56} />
+          Select a recipient<br/>to view their details
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── VOLUNTEERS ────────────────────────────────────────────
+const Volunteers = () => {
+  const stMap = {
+    active:    { bg:'#edfaf3', color:'#1e6b3e', border:'#b0e8c6', label:'On route',  icon:'delivery-van.png' },
+    delayed:   { bg:'#fff8eb', color:'#7a4f00', border:'#fce0a0', label:'Delayed',   icon:'clock.png' },
+    complete:  { bg:'#f0f3ff', color:'#2038c0', border:'#c0ceff', label:'Complete',  icon:'checkmark-circle.png' },
+    available: { bg:'#f0ede0', color:'#4a4a60', border:'#dddac8', label:'Available', icon:'person-check.png' },
+  };
+
+  return (
+    <div style={S.main}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:22 }}>
+        <div>
+          <div style={S.title}>Volunteers</div>
+          <div style={S.sub}>5 registered · 3 active today</div>
+        </div>
+        <button style={{ ...S.btn, ...S.btnY }}>
+          <Icon name="person-plus.png" size={20} />Add volunteer
+        </button>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(290px, 1fr))', gap:14 }}>
+        {VOLUNTEERS.map(v => {
+          const st = stMap[v.status];
+          return (
+            <div key={v.id} style={S.card}>
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+                <div style={{ width:48, height:48, borderRadius:999, background:'#dce3fe', border:'1.5px solid rgba(61,92,245,0.25)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:700, color:'#2038c0', fontFamily:"'DM Sans',sans-serif", flexShrink:0 }}>
+                  {v.name.split(' ').map(n=>n[0]).join('').slice(0,2)}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, fontWeight:600, color:'#1c1c2e' }}>{v.name}</div>
+                  <div style={{ fontSize:13, color:'#4a4a60', display:'flex', alignItems:'center', gap:6, marginTop:3 }}>
+                    <Icon name="phone-handset.png" size={15} />{v.phone}
+                  </div>
+                </div>
+                <span style={{ ...S.badge, background:st.bg, color:st.color, border:`1.5px solid ${st.border}`, fontSize:12 }}>
+                  <Icon name={st.icon} size={14} />{st.label}
+                </span>
+              </div>
+
+              <div style={{ fontSize:13, color:'#4a4a60', marginBottom:14, display:'flex', alignItems:'center', gap:8, paddingLeft:2 }}>
+                <Icon name={v.route==='Unassigned'?'route-road.png':'route-stops.png'} size={22} />
+                {v.route==='Unassigned'
+                  ? <span style={{ color:'#6a6a80' }}>No route assigned</span>
+                  : <><strong style={{ color:'#1c1c2e' }}>{v.route}</strong> · {v.stops} stops</>
+                }
+              </div>
+
+              <div style={{ display:'flex', gap:8 }}>
+                {v.route==='Unassigned'
+                  ? <button style={{ ...S.btn, ...S.btnP, ...S.btnSm, flex:1 }}>
+                      <Icon name="route-stops.png" size={16} />Assign route
+                    </button>
+                  : <button style={{ ...S.btn, ...S.btnSm, flex:1 }}>
+                      <Icon name="phone-handset.png" size={16} />Contact
+                    </button>
+                }
+                <button style={{ ...S.btn, ...S.btnSm }}>
+                  <Icon name="pencil-edit.png" size={16} />Edit
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ── SCHEDULE ─────────────────────────────────────────────
+const Schedule = () => {
+  const days = ['Mon','Tue','Wed','Thu','Fri'];
+  const today = 1;
+  const rowColors = ['#fae278','#dce3fe','#edfaf3','#fff8eb'];
+
+  return (
+    <div style={S.main}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:22 }}>
+        <div>
+          <div style={S.title}>Schedule</div>
+          <div style={S.sub}>Week of April 21 – 25, 2026</div>
+        </div>
+        <div style={{ display:'flex', gap:10 }}>
+          <button style={S.btn}>← Prev</button>
+          <button style={{ ...S.btn, ...S.btnY }}><Icon name="calendar.png" size={18} />Today</button>
+          <button style={S.btn}>Next →</button>
+          <button style={{ ...S.btn }}><Icon name="export.png" size={18} />Export</button>
+        </div>
+      </div>
+
+      <div style={{ background:'#fff', borderRadius:12, border:'1.5px solid rgba(24,24,60,0.13)', overflow:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'150px repeat(5, 1fr)' }}>
+          <div style={{ padding:'12px 16px', background:'#fdf8e4', borderBottom:'1.5px solid rgba(24,24,60,0.1)' }} />
+          {days.map((d,i) => (
+            <div key={d} style={{ padding:'12px 16px', textAlign:'center', background:i===today?'#fae278':'#fdf8e4', borderBottom:'1.5px solid rgba(24,24,60,0.1)', borderLeft:'1.5px solid rgba(24,24,60,0.08)' }}>
+              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:14, fontWeight:600, color:i===today?'#1c1c2e':'#4a4a60' }}>{d}</div>
+              <div style={{ fontSize:12, color:'#6a6a80' }}>Apr {21+i}</div>
+            </div>
+          ))}
+          {ROUTES.map((r, ri) => (
+            <React.Fragment key={r.id}>
+              <div style={{ padding:'14px 16px', background:'#fdf8e4', borderBottom:'1.5px solid rgba(24,24,60,0.07)', display:'flex', alignItems:'center', gap:10 }}>
+                <Icon name="delivery-van.png" size={24} />
+                <div style={{ fontSize:13, fontWeight:600, color:'#1c1c2e' }}>{r.name}</div>
+              </div>
+              {days.map((d, di) => {
+                const has = (ri * 5 + di) % 3 !== 0;
+                return (
+                  <div key={d} style={{ padding:'8px 10px', borderBottom:'1.5px solid rgba(24,24,60,0.07)', borderLeft:'1.5px solid rgba(24,24,60,0.07)', background:di===today?'rgba(250,226,120,0.07)':'transparent' }}>
+                    {has && (
+                      <div style={{ background:rowColors[ri], borderRadius:6, padding:'7px 10px', fontSize:12, fontWeight:500, color:'#1c1c2e', border:'1.5px solid rgba(24,24,60,0.1)' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                          <Icon name="user-profile.png" size={14} />
+                          {r.driver || <span style={{ color:'#9b1c1c' }}>No driver</span>}
+                        </div>
+                        <div style={{ fontSize:11, color:'#4a4a60', display:'flex', alignItems:'center', gap:4 }}>
+                          <Icon name="location-pin.png" size={12} />{r.stops} stops
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── APP ROOT ──────────────────────────────────────────────
+const App = () => {
+  const [page, setPage] = React.useState(() => localStorage.getItem('mealflo_page') || 'dashboard');
+  const nav = p => { setPage(p); localStorage.setItem('mealflo_page', p); };
+  const screens = { dashboard:Dashboard, routes:Routes, recipients:Recipients, volunteers:Volunteers, schedule:Schedule };
+  const Screen = screens[page] || Dashboard;
+  return (
+    <div style={S.page}>
+      <Header currentPage={page} onNav={nav} notifCount={2} />
+      <div style={S.body}><Screen onNav={nav} /></div>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

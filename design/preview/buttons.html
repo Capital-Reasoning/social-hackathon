@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+@font-face { font-family:'DM Sans'; src:url('../fonts/DMSans-VariableFont_opsz_wght.ttf') format('truetype'); font-weight:100 900; font-style:normal; }
+@font-face { font-family:'DM Sans'; src:url('../fonts/DMSans-Italic-VariableFont_opsz_wght.ttf') format('truetype'); font-weight:100 900; font-style:italic; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:#fffdf0; padding:20px; font-family:'DM Sans',sans-serif; }
+.section { margin-bottom:16px; }
+.label { font-size:10px; font-weight:500; color:#9090b0; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
+.row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:7px;
+  font-family:'DM Sans',sans-serif; font-weight:600; cursor:pointer;
+  border-radius:8px; border:1.5px solid rgba(24,24,60,0.14); white-space:nowrap;
+  text-decoration:none;
+}
+.btn img { width:18px; height:18px; object-fit:contain; }
+.lg  { height:52px; padding:0 24px; font-size:16px; }
+.md  { height:44px; padding:0 18px; font-size:14px; }
+.sm  { height:36px; padding:0 14px; font-size:13px; border-radius:6px; }
+/* Accessible button variants */
+.primary  { background:#3d5cf5; color:#fff; border-color:#3d5cf5; }          /* 6.1:1 */
+.yellow   { background:#fae278; color:#1c1c2e; border-color:rgba(170,120,0,0.35); } /* 12:1 */
+.secondary{ background:#fff; color:#1c1c2e; }
+.ghost    { background:transparent; color:#2038c0; border-color:transparent; } /* 7.2:1 on white */
+.danger   { background:#fff0f0; color:#9b1c1c; border-color:#fdd0d0; }       /* 6.1:1 */
+.disabled { background:#f0ede0; color:#6a6a80; border-color:rgba(24,24,60,0.1); cursor:not-allowed; }
+</style></head><body>
+
+<div class="section">
+  <div class="label">Primary — Large (52px)</div>
+  <div class="row">
+    <button class="btn lg primary">
+      <img src="../assets/icons/route-road.png" alt="">Start route
+    </button>
+    <button class="btn lg yellow">
+      <img src="../assets/icons/plus.png" alt="">Add recipient
+    </button>
+    <button class="btn lg secondary">Cancel</button>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">Variants — Medium (44px)</div>
+  <div class="row">
+    <button class="btn md primary">
+      <img src="../assets/icons/checkmark-circle.png" alt="">Mark delivered
+    </button>
+    <button class="btn md yellow">
+      <img src="../assets/icons/pencil-edit.png" alt="">Edit route
+    </button>
+    <button class="btn md secondary">
+      <img src="../assets/icons/checklist.png" alt="">View details
+    </button>
+    <button class="btn md ghost">Skip stop</button>
+    <button class="btn md danger">
+      <img src="../assets/icons/close-x.png" alt="">Remove
+    </button>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">Small (36px) + Disabled</div>
+  <div class="row">
+    <button class="btn sm primary">Save</button>
+    <button class="btn sm secondary">Filter</button>
+    <button class="btn sm ghost">More</button>
+    <button class="btn sm disabled" disabled>Unavailable</button>
+  </div>
+</div>
+
+</body></html>

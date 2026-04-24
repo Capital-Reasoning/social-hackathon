@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: #fffdf0; padding: 20px; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.swatch {
+  height: 72px; border-radius: 8px;
+  border: 1.5px solid rgba(24,24,60,0.12);
+  display: flex; flex-direction: column; justify-content: flex-end; padding: 8px 10px;
+}
+.label { font-size: 11px; font-weight: 500; line-height: 1.3; }
+.hex { font-size: 10px; opacity: 0.65; margin-top: 2px; }
+.section-title { font-size: 11px; font-weight: 500; color: #9090b0; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.row { display: flex; gap: 10px; margin-bottom: 10px; }
+.pill { height: 36px; border-radius: 999px; display: flex; align-items: center; padding: 0 14px; font-size: 12px; font-weight: 500; border: 1.5px solid rgba(24,24,60,0.14); }
+</style></head><body>
+
+<div class="section-title">Status Colors</div>
+<div class="grid" style="margin-bottom:14px">
+  <div class="swatch" style="background:#4ead6f;"><span class="label" style="color:#fff">Success</span><span class="hex" style="color:#fff">#4ead6f</span></div>
+  <div class="swatch" style="background:#f0a830;"><span class="label">Warning</span><span class="hex">#f0a830</span></div>
+  <div class="swatch" style="background:#e05050;"><span class="label" style="color:#fff">Error</span><span class="hex" style="color:#fff">#e05050</span></div>
+  <div class="swatch" style="background:#7890fa;"><span class="label" style="color:#fff">Action</span><span class="hex" style="color:#fff">#7890fa</span></div>
+</div>
+
+<div class="section-title">Surface & Background</div>
+<div class="grid" style="margin-bottom:14px">
+  <div class="swatch" style="background:#fffdf0; border:1.5px solid rgba(24,24,60,0.14)"><span class="label">Page BG</span><span class="hex">#fffdf0</span></div>
+  <div class="swatch" style="background:#ffffff; border:1.5px solid rgba(24,24,60,0.14)"><span class="label">Surface</span><span class="hex">#ffffff</span></div>
+  <div class="swatch" style="background:#fdf8e4; border:1.5px solid rgba(24,24,60,0.14)"><span class="label">Surface Tint</span><span class="hex">#fdf8e4</span></div>
+  <div class="swatch" style="background:#fae278; border:2px solid rgba(200,160,0,0.3)"><span class="label">Header BG</span><span class="hex">#fae278</span></div>
+</div>
+
+<div class="section-title">Text Hierarchy</div>
+<div class="row">
+  <div style="flex:1; background:#fff; border-radius:8px; padding:12px; border:1.5px solid rgba(24,24,60,0.12)">
+    <div style="font-size:15px; font-weight:600; color:#1c1c2e; margin-bottom:4px">Primary — #1c1c2e</div>
+    <div style="font-size:13px; color:#4e4e72; margin-bottom:4px">Secondary — #4e4e72</div>
+    <div style="font-size:12px; color:#9090b0">Tertiary / Placeholder — #9090b0</div>
+  </div>
+  <div style="flex:1; background:#fae278; border-radius:8px; padding:12px; border:1.5px solid rgba(200,160,0,0.3)">
+    <div style="font-size:13px; font-weight:600; color:#1c1c2e; margin-bottom:4px">Text on Yellow</div>
+    <div style="font-size:12px; color:#4e4e72">Body on yellow surface</div>
+  </div>
+  <div style="flex:1; background:#7890fa; border-radius:8px; padding:12px; border:1.5px solid rgba(90,116,248,0.4)">
+    <div style="font-size:13px; font-weight:600; color:#fff; margin-bottom:4px">Text on Blue</div>
+    <div style="font-size:12px; color:rgba(255,255,255,0.75)">Body on action surface</div>
+  </div>
+</div>
+
+</body></html>
