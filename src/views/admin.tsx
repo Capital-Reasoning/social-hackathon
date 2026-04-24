@@ -5,7 +5,7 @@ import { AdminInboxReview } from "@/components/mealflo/admin-inbox-review";
 import { AdminInventoryWorkflows } from "@/components/mealflo/admin-inventory-workflows";
 import { AdminRouteActions } from "@/components/mealflo/admin-route-actions";
 import { ButtonLink } from "@/components/mealflo/button";
-import { Card, CardHeader } from "@/components/mealflo/card";
+import { Card } from "@/components/mealflo/card";
 import {
   PageFrame,
   PageHeader,
@@ -63,27 +63,6 @@ const routeStatusConfig = {
   ready: { label: "Ready to assign", tone: "info" as const },
 };
 
-const triageBucketConfig: Record<
-  TriageBucket,
-  { label: string; note: string; tone: "info" | "neutral" | "warning" }
-> = {
-  later: {
-    label: "Later",
-    note: "Good candidates when a route has safe extra room.",
-    tone: "neutral",
-  },
-  today: {
-    label: "Today",
-    note: "Work that should be routed or watched now.",
-    tone: "warning",
-  },
-  tomorrow: {
-    label: "Tomorrow",
-    note: "Approved requests ready for the next planning pass.",
-    tone: "info",
-  },
-};
-
 function RouteStatusBadge({ status }: { status: RouteSummaryCard["status"] }) {
   const config = routeStatusConfig[status];
 
@@ -111,6 +90,28 @@ function displayKitchenLabel(value: string) {
     .replace(/cold-chain/gi, "needs refrigeration")
     .replace(/Cold chain/g, "Needs refrigeration")
     .replace(/Fridge/g, "Needs refrigeration");
+}
+
+function urgencyValue(value: string) {
+  const numeric = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(numeric)) {
+    return 1;
+  }
+
+  return Math.max(1, Math.min(10, Math.round(numeric / 10)));
+}
+
+function urgencyTone(value: number) {
+  if (value >= 9) {
+    return "border-[rgba(224,80,80,0.24)] bg-[var(--mf-color-red-50)] text-error-text";
+  }
+
+  if (value >= 8) {
+    return "border-[rgba(240,168,48,0.3)] bg-[var(--mf-color-amber-50)] text-warning-text";
+  }
+
+  return "border-[rgba(24,24,60,0.12)] bg-[rgba(255,255,255,0.76)] text-muted";
 }
 
 function formatAdminMinutes(value: number) {
@@ -161,45 +162,40 @@ function ReadyRequestsTable({
   buckets: Record<TriageBucket, TriageRequestCard[]>;
   limit?: number;
 }) {
-  const rows = (["today", "tomorrow", "later"] as TriageBucket[])
-    .flatMap((bucket) =>
-      buckets[bucket].map((request) => ({
-        bucket,
-        request,
-      }))
-    )
-    .slice(0, limit);
+  const rows = buckets.today.slice(0, limit);
 
   return (
     <div className="min-w-0 overflow-hidden">
-      <table className="w-full min-w-[700px] border-collapse text-left">
+      <table className="w-full min-w-[520px] border-collapse text-left">
         <thead>
           <tr className="border-line text-muted border-b-[1.5px] text-xs font-semibold tracking-[0.08em] uppercase">
-            <th className="py-2.5 pr-3">Window</th>
             <th className="py-2.5 pr-3">Neighbor</th>
-            <th className="py-2.5 pr-3">Details</th>
+            <th className="py-2.5 pr-3">Urgency</th>
             <th className="py-2.5 pr-3 text-right">Meals</th>
             <th className="py-2.5 pr-0">Status</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ bucket, request }) => (
+          {rows.map((request) => {
+            const urgency = urgencyValue(request.urgency);
+
+            return (
             <tr
               key={request.id}
               className="border-line/70 border-b last:border-b-0"
             >
               <td className="py-2.5 pr-3">
-                <Badge size="sm" tone={triageBucketConfig[bucket].tone}>
-                  {triageBucketConfig[bucket].label}
-                </Badge>
+                <p className="text-ink font-medium">{request.clientName}</p>
+                <p className="text-muted mt-0.5 truncate text-sm leading-5">
+                  {request.address}
+                </p>
               </td>
-              <td className="text-ink py-2.5 pr-3 font-medium">
-                {request.clientName}
-              </td>
-              <td className="text-muted py-2.5 pr-3 text-sm leading-5">
-                <span className="text-ink font-medium">{request.urgency}</span>
-                <span className="mx-2 text-[rgba(24,24,60,0.24)]">/</span>
-                {request.address}
+              <td className="py-2.5 pr-3">
+                <span
+                  className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full border-[1.5px] px-2 text-sm font-semibold ${urgencyTone(urgency)}`}
+                >
+                  {urgency}
+                </span>
               </td>
               <td className="text-ink py-2.5 pr-3 text-right font-medium">
                 {request.mealCount}
@@ -210,7 +206,8 @@ function ReadyRequestsTable({
                 </Badge>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -223,16 +220,18 @@ function DashboardSectionHeader({
   title,
 }: {
   action?: React.ReactNode;
-  note: string;
+  note?: string;
   title: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="space-y-1">
         <h2 className="font-display text-ink text-[28px] font-semibold tracking-[-0.02em]">
           {title}
         </h2>
-        <p className="text-muted max-w-[44rem] text-sm leading-6">{note}</p>
+        {note ? (
+          <p className="text-muted max-w-[44rem] text-sm leading-6">{note}</p>
+        ) : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -593,11 +592,10 @@ export async function AdminDashboardView() {
 
       <DashboardSummaryCard items={data.dashboardKpis} />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.36fr)_minmax(0,460px)]">
+      <div className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(420px,0.82fr)]">
         <section className="space-y-3">
           <DashboardSectionHeader
             title="Live map"
-            note="Only driver phones currently streaming location appear here."
             action={
               <StatusPill
                 icon="route-road"
@@ -607,25 +605,24 @@ export async function AdminDashboardView() {
             }
           />
           <MapCanvas
-            className="h-[500px]"
+            className="h-[640px]"
             initialView="greater-victoria"
             markers={activeDriverMarkers}
           />
         </section>
 
-        <section className="min-w-0 space-y-3">
-          <DashboardSectionHeader
-            title="Ready today"
-            note="Approved requests that can feed the next route pass."
-          />
-          <div className="border-line min-w-0 overflow-hidden rounded-[16px] border-[1.5px] bg-white px-4 py-3">
+        <section className="flex min-w-0 flex-col space-y-3">
+          <DashboardSectionHeader title="Ready today" />
+          <div className="border-line flex h-[640px] min-w-0 flex-col overflow-hidden rounded-[16px] border-[1.5px] bg-white px-4 py-3">
             <ReadyRequestsTable buckets={data.requestBuckets} />
-            <div className="border-line/70 mt-3 flex justify-end border-t pt-3">
+            <div className="border-line/70 mt-auto flex border-t pt-3">
               <ButtonLink
+                className="h-[58px] text-lg"
+                fullWidth
                 href="/demo/admin?view=routes"
-                size="sm"
-                variant="secondary"
-                leading={<MealfloIcon name="route-road" size={18} />}
+                size="lg"
+                variant="primary"
+                leading={<MealfloIcon name="route-road" size={34} />}
               >
                 View all
               </ButtonLink>
@@ -760,22 +757,19 @@ export async function AdminRoutesView() {
 
   const timeNeededRows = [
     {
-      label: "Estimated hours for today's deliveries",
+      label: "Today",
       minutes: plannedMinutesByBucket.today,
       routeCount: plannedRouteCountsByBucket.today,
-      tone: "warning" as const,
     },
     {
-      label: "Estimated hours for tomorrow's deliveries",
+      label: "Tomorrow",
       minutes: plannedMinutesByBucket.tomorrow,
       routeCount: plannedRouteCountsByBucket.tomorrow,
-      tone: "info" as const,
     },
     {
-      label: "Estimated hours for rest of week's deliveries",
+      label: "Rest of week",
       minutes: plannedMinutesByBucket.later,
       routeCount: plannedRouteCountsByBucket.later,
-      tone: "neutral" as const,
     },
   ];
 
@@ -788,39 +782,47 @@ export async function AdminRoutesView() {
       />
 
       <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <Card className="space-y-3">
-          <CardHeader title="Estimated route hours" />
-          <div className="grid gap-3">
-            {timeNeededRows.map((row) => (
-              <div
-                key={row.label}
-                className="border-line rounded-[14px] border-[1.5px] bg-white px-4 py-3"
-              >
-                <p className="font-display text-ink text-[30px] leading-none font-bold">
-                  {formatAdminMinutes(row.minutes)}
-                </p>
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <p className="text-muted text-sm leading-5">{row.label}</p>
-                  <Badge size="sm" tone={row.tone}>
-                    {row.routeCount} routes
-                  </Badge>
+        <section className="space-y-3">
+          <DashboardSectionHeader
+            title="Estimated route hours"
+            note="Plan route length before assigning drivers."
+          />
+          <Card className="overflow-hidden p-0">
+            <div className="divide-line/70 divide-y">
+              {timeNeededRows.map((row) => (
+                <div
+                  key={row.label}
+                  className="grid gap-2 px-5 py-5 sm:grid-cols-[1fr_auto] sm:items-center xl:grid-cols-1 xl:items-start"
+                >
+                  <p className="font-display text-ink text-[22px] leading-none font-semibold tracking-[-0.01em]">
+                    {row.label}
+                  </p>
+                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 sm:justify-end xl:justify-start">
+                    <p className="font-display text-ink text-[34px] leading-none font-bold tracking-[-0.02em]">
+                      {formatAdminMinutes(row.minutes)}
+                    </p>
+                    <p className="text-muted text-sm font-medium">
+                      {row.routeCount}{" "}
+                      {row.routeCount === 1 ? "route" : "routes"}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+              ))}
+            </div>
+          </Card>
+        </section>
 
-        <Card className="space-y-4">
-          <CardHeader
+        <section className="min-w-0 space-y-3">
+          <DashboardSectionHeader
             title="Driver availability"
             note="Use availability length, starting area, and vehicle fit before assigning route length."
           />
           <DriverCapacityTable drivers={data.driverCapacity} />
-        </Card>
+        </section>
       </div>
 
-      <Card className="space-y-4">
-        <CardHeader
+      <section className="space-y-3">
+        <DashboardSectionHeader
           title="Today's deliveries"
           note="Today stays first and compact."
           action={
@@ -828,20 +830,20 @@ export async function AdminRoutesView() {
           }
         />
         <RoutedPeopleTable requests={data.requestBuckets.today} />
-      </Card>
+      </section>
 
-      <Card className="space-y-4">
-        <CardHeader
+      <section className="space-y-3">
+        <DashboardSectionHeader
           title="Later deliveries"
           note="Tomorrow and later stay below today's work."
           action={<Badge tone="info">{laterRequests.length}</Badge>}
         />
         <RoutedPeopleTable requests={laterRequests} />
-      </Card>
+      </section>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
-        <Card className="space-y-4">
-          <CardHeader
+        <section className="space-y-3">
+          <DashboardSectionHeader
             title="Route map"
             note="The selected route uses the same detailed street map as the dashboard."
           />
@@ -851,19 +853,19 @@ export async function AdminRoutesView() {
             markers={data.liveMarkers}
             path={data.routeLine}
           />
-        </Card>
+        </section>
 
-        <Card className="space-y-4">
-          <CardHeader
+        <section className="min-w-0 space-y-3">
+          <DashboardSectionHeader
             title="Route options"
             note="Inventory and timing stay visible before a driver is assigned."
           />
           <RoutePlansTable plans={data.routePlans} />
-        </Card>
+        </section>
       </div>
 
-      <Card className="space-y-4">
-        <CardHeader
+      <section className="space-y-3">
+        <DashboardSectionHeader
           title="Bring from inventory"
           note="Driver loadout is named per stop so the food handoff is clear."
         />
@@ -917,7 +919,7 @@ export async function AdminRoutesView() {
             ))}
           </TableBody>
         </Table>
-      </Card>
+      </section>
     </div>
   );
 }

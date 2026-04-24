@@ -42,6 +42,12 @@ import {
   type GeneratedRoutePlan,
   type PlannerRequest,
 } from "@/server/mealflo/routing";
+import {
+  resolveStreetRoute,
+  type ResolvedRoute,
+  type RouteCoordinate,
+  type RouteSegmentDirections,
+} from "@/server/mealflo/route-engine";
 
 const VANCOUVER_TZ = "America/Vancouver";
 const ANCHOR_STALE_AFTER_MS = 90_000;
@@ -111,6 +117,14 @@ export type DriverRouteStop = {
   warnings: string[];
 };
 
+export type DriverRouteDirection = {
+  distance: string;
+  duration: string;
+  instruction: string;
+  sequence: number;
+  segmentIndex: number;
+};
+
 export type DriverRouteOption = {
   area: string;
   coldChainNote: string;
@@ -123,7 +137,10 @@ export type DriverRouteOption = {
   plannedDriveMinutes: number;
   plannedTotalMinutes: number;
   remainingCount: number;
+  routeDirections: DriverRouteDirection[];
+  routeFallbackReason: string | null;
   routeLine: ReadonlyArray<readonly [number, number]>;
+  routingProvider: ResolvedRoute["provider"];
   stopCount: number;
   stops: DriverRouteStop[];
   totalPlannedTime: string;
@@ -374,17 +391,24 @@ export type DriverActiveData = {
   currentStopIndex: number;
   deliveredCount: number;
   liveMarkers: LiveMarker[];
+  routeDirections: DriverRouteDirection[];
+  routeFallbackReason: string | null;
   routeLine: ReadonlyArray<readonly [number, number]>;
   routeId: string;
   routeName: string;
+  routingProvider: ResolvedRoute["provider"];
   volunteerId: string;
 };
 
 export type RouteDetailData = {
+  directions: DriverRouteDirection[];
   route: RouteSummaryCard & {
     explanation: string;
     warnings: string[];
   };
+  routeFallbackReason: string | null;
+  routeLine: ReadonlyArray<readonly [number, number]>;
+  routingProvider: ResolvedRoute["provider"];
   stops: Array<{
     accessSummary: string;
     address: string;
@@ -545,6 +569,33 @@ function formatRelativeMinutes(value: number) {
   const minutes = value % 60;
 
   return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
+}
+
+function formatRelativeSeconds(value: number) {
+  return formatRelativeMinutes(Math.max(1, Math.round(value / 60)));
+}
+
+function formatDistanceMeters(value: number) {
+  if (value < 1000) {
+    return `${Math.max(10, Math.round(value / 10) * 10)} m`;
+  }
+
+  return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)} km`;
+}
+
+function formatRouteDirections(route: ResolvedRoute) {
+  return route.segments
+    .flatMap((segment, segmentIndex) =>
+      segment.steps.map((step) => ({ segmentIndex, step }))
+    )
+    .filter(({ step }) => step.instruction.length > 0)
+    .map(({ segmentIndex, step }, index) => ({
+      sequence: index + 1,
+      instruction: step.instruction,
+      distance: formatDistanceMeters(step.distanceMeters),
+      duration: formatRelativeSeconds(step.durationSeconds),
+      segmentIndex,
+    })) satisfies DriverRouteDirection[];
 }
 
 function sentenceCaseList(values: string[]) {
@@ -724,7 +775,7 @@ async function loadDemoGraph() {
   };
 }
 
-function buildRoutePath(
+function buildRouteWaypoints(
   routeId: string,
   depotRows: Array<typeof depots.$inferSelect>,
   routeRows: Array<typeof routes.$inferSelect>,
@@ -733,7 +784,7 @@ function buildRoutePath(
   const route = routeRows.find((entry) => entry.id === routeId);
 
   if (!route) {
-    return [] as ReadonlyArray<readonly [number, number]>;
+    return [] as RouteCoordinate[];
   }
 
   const depot = depotRows.find((entry) => entry.id === route.startDepotId);
@@ -741,12 +792,120 @@ function buildRoutePath(
     .filter((entry) => entry.routeId === route.id)
     .sort((left, right) => left.sequence - right.sequence);
 
-  const coordinates = [
+  return [
     depot ? ([depot.longitude, depot.latitude] as const) : null,
     ...orderedStops.map((entry) => [entry.longitude, entry.latitude] as const),
-  ].filter(Boolean);
+  ].filter(Boolean) as RouteCoordinate[];
+}
 
-  return coordinates as ReadonlyArray<readonly [number, number]>;
+function getRoutingWaypointHash(waypoints: readonly RouteCoordinate[]) {
+  return waypoints
+    .map(
+      ([longitude, latitude]) =>
+        `${longitude.toFixed(6)},${latitude.toFixed(6)}`
+    )
+    .join("|");
+}
+
+function getCachedResolvedRoute(
+  route: typeof routes.$inferSelect,
+  waypointHash: string
+): ResolvedRoute | null {
+  if (
+    route.routingWaypointHash !== waypointHash ||
+    !route.routeGeometry ||
+    !route.routeDirections ||
+    !route.routingProvider
+  ) {
+    return null;
+  }
+
+  const provider =
+    route.routingProvider === "openrouteservice"
+      ? "openrouteservice"
+      : "fallback";
+
+  return {
+    distanceMeters: route.routeDistanceMeters ?? 0,
+    durationSeconds: route.routeDurationSeconds ?? 0,
+    fallbackReason: route.routeFallbackReason,
+    geometry: route.routeGeometry,
+    provider,
+    segments: route.routeDirections as RouteSegmentDirections[],
+  };
+}
+
+async function saveResolvedRoute(
+  routeId: string,
+  waypointHash: string,
+  resolvedRoute: ResolvedRoute
+) {
+  const now = new Date();
+
+  try {
+    await getDb()
+      .update(routes)
+      .set({
+        routeDirections: resolvedRoute.segments,
+        routeDistanceMeters: resolvedRoute.distanceMeters,
+        routeDurationSeconds: resolvedRoute.durationSeconds,
+        routeFallbackReason: resolvedRoute.fallbackReason,
+        routeGeometry: resolvedRoute.geometry,
+        routedAt: now,
+        routingProvider: resolvedRoute.provider,
+        routingWaypointHash: waypointHash,
+        updatedAt: now,
+      })
+      .where(eq(routes.id, routeId));
+  } catch (error) {
+    console.warn("Could not persist resolved route directions.", error);
+  }
+}
+
+async function buildResolvedRoute(
+  routeId: string | undefined,
+  depotRows: Array<typeof depots.$inferSelect>,
+  routeRows: Array<typeof routes.$inferSelect>,
+  stopRows: Array<typeof routeStops.$inferSelect>
+) {
+  if (!routeId) {
+    return resolveStreetRoute([]);
+  }
+
+  const route = routeRows.find((entry) => entry.id === routeId);
+  const waypoints = buildRouteWaypoints(
+    routeId,
+    depotRows,
+    routeRows,
+    stopRows
+  );
+  const waypointHash = getRoutingWaypointHash(waypoints);
+
+  if (route) {
+    const cachedRoute = getCachedResolvedRoute(route, waypointHash);
+
+    if (cachedRoute) {
+      return cachedRoute;
+    }
+  }
+
+  const resolvedRoute = await resolveStreetRoute(waypoints);
+
+  if (route) {
+    await saveResolvedRoute(route.id, waypointHash, resolvedRoute);
+  }
+
+  return resolvedRoute;
+}
+
+async function buildRoutePath(
+  routeId: string | undefined,
+  depotRows: Array<typeof depots.$inferSelect>,
+  routeRows: Array<typeof routes.$inferSelect>,
+  stopRows: Array<typeof routeStops.$inferSelect>
+) {
+  return (await buildResolvedRoute(routeId, depotRows, routeRows, stopRows))
+    .geometry;
 }
 
 function buildLiveMarkers(
@@ -1009,7 +1168,7 @@ function buildDriverRouteStopDetails(
     });
 }
 
-function buildDriverRouteOptions(
+async function buildDriverRouteOptions(
   graph: Awaited<ReturnType<typeof loadDemoGraph>>
 ) {
   const volunteerById = new Map(
@@ -1019,29 +1178,29 @@ function buildDriverRouteOptions(
     graph.vehicleRows.map((entry) => [entry.id, entry] as const)
   );
 
-  return graph.routeRows
-    .slice()
-    .sort((left, right) => {
-      const statusWeight = (route: typeof routes.$inferSelect) =>
-        route.status === "in_progress"
-          ? 0
-          : route.status === "approved"
-            ? 1
-            : route.status === "planned"
-              ? 2
-              : 3;
+  const orderedRoutes = graph.routeRows.slice().sort((left, right) => {
+    const statusWeight = (route: typeof routes.$inferSelect) =>
+      route.status === "in_progress"
+        ? 0
+        : route.status === "approved"
+          ? 1
+          : route.status === "planned"
+            ? 2
+            : 3;
 
-      return (
-        statusWeight(left) - statusWeight(right) ||
-        left.plannedTotalMinutes - right.plannedTotalMinutes ||
-        left.routeName.localeCompare(right.routeName)
-      );
-    })
-    .map((route) => {
+    return (
+      statusWeight(left) - statusWeight(right) ||
+      left.plannedTotalMinutes - right.plannedTotalMinutes ||
+      left.routeName.localeCompare(right.routeName)
+    );
+  });
+
+  return Promise.all(
+    orderedRoutes.map(async (route) => {
       const volunteer = volunteerById.get(route.volunteerId);
       const vehicle = vehicleById.get(route.vehicleId);
       const stops = buildDriverRouteStopDetails(route.id, graph);
-      const routeLine = buildRoutePath(
+      const resolvedRoute = await buildResolvedRoute(
         route.id,
         graph.depotRows,
         graph.routeRows,
@@ -1060,6 +1219,10 @@ function buildDriverRouteOptions(
         totalPlannedTime: formatRelativeMinutes(route.plannedTotalMinutes),
         plannedDriveMinutes: route.plannedDriveMinutes,
         plannedTotalMinutes: route.plannedTotalMinutes,
+        routeDirections: formatRouteDirections(resolvedRoute),
+        routeFallbackReason: resolvedRoute.fallbackReason,
+        routeLine: resolvedRoute.geometry,
+        routingProvider: resolvedRoute.provider,
         utilization: `${route.capacityUtilizationPercent}%`,
         firstStop:
           stops.find((stop) => stop.status !== "delivered")?.name ??
@@ -1071,7 +1234,6 @@ function buildDriverRouteOptions(
             ? "A cooler tote is loaded with this vehicle."
             : "Meals are ready for this route."),
         warnings: route.warnings,
-        routeLine,
         stops,
         volunteer: {
           id: route.volunteerId,
@@ -1086,7 +1248,8 @@ function buildDriverRouteOptions(
           wheelchairLift: vehicle?.wheelchairLift ?? false,
         },
       } satisfies DriverRouteOption;
-    });
+    })
+  );
 }
 
 function buildTriageBuckets(graph: Awaited<ReturnType<typeof loadDemoGraph>>) {
@@ -2809,7 +2972,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       graph.depotRows
     ),
     requestBuckets,
-    routeLine: buildRoutePath(
+    routeLine: await buildRoutePath(
       graph.routeRows.find((entry) => entry.status === "in_progress")?.id ??
         graph.routeRows[0]?.id,
       graph.depotRows,
@@ -3128,7 +3291,7 @@ export async function getAdminRoutesData(): Promise<AdminRoutesData> {
       graph.depotRows
     ),
     requestBuckets: buildTriageBuckets(graph),
-    routeLine: buildRoutePath(
+    routeLine: await buildRoutePath(
       selectedRoute?.id,
       graph.depotRows,
       graph.routeRows,
@@ -3209,7 +3372,7 @@ export async function getAdminLiveData(): Promise<AdminLiveData> {
       graph.volunteerRows,
       graph.depotRows
     ),
-    routeLine: buildRoutePath(
+    routeLine: await buildRoutePath(
       graph.routeRows.find((entry) => entry.status === "in_progress")?.id ??
         graph.routeRows[0]?.id,
       graph.depotRows,
@@ -3355,7 +3518,7 @@ export async function getAdminInventoryData(): Promise<AdminInventoryData> {
 export async function getDriverOfferData(): Promise<DriverOfferData> {
   const graph = await loadDemoGraph();
   const routeSummaries = buildRouteSummaries(graph);
-  const routeOptions = buildDriverRouteOptions(graph);
+  const routeOptions = await buildDriverRouteOptions(graph);
   const suggestedRoute =
     routeSummaries.find((entry) => entry.status === "on-track") ??
     routeSummaries[0];
@@ -3434,6 +3597,12 @@ export async function getDriverActiveData(
       )
     ).slice(0, 3),
   ].filter(Boolean) as string[];
+  const resolvedRoute = await buildResolvedRoute(
+    activeRoute.id,
+    graph.depotRows,
+    graph.routeRows,
+    graph.stopRows
+  );
 
   return {
     currentStop: {
@@ -3463,14 +3632,12 @@ export async function getDriverActiveData(
       graph.volunteerRows,
       graph.depotRows
     ),
-    routeLine: buildRoutePath(
-      activeRoute.id,
-      graph.depotRows,
-      graph.routeRows,
-      graph.stopRows
-    ),
+    routeDirections: formatRouteDirections(resolvedRoute),
+    routeFallbackReason: resolvedRoute.fallbackReason,
+    routeLine: resolvedRoute.geometry,
     routeId: activeRoute.id,
     routeName: activeRoute.routeName,
+    routingProvider: resolvedRoute.provider,
     volunteerId: activeRoute.volunteerId,
   };
 }
@@ -3494,6 +3661,12 @@ export async function getRouteDetail(
   const summary = buildRouteSummaries(graph).find(
     (entry) => entry.id === route.id
   )!;
+  const resolvedRoute = await buildResolvedRoute(
+    route.id,
+    graph.depotRows,
+    graph.routeRows,
+    graph.stopRows
+  );
   const mealById = new Map(
     graph.mealRows.map((entry) => [entry.id, entry] as const)
   );
@@ -3542,11 +3715,15 @@ export async function getRouteDetail(
     });
 
   return {
+    directions: formatRouteDirections(resolvedRoute),
     route: {
       ...summary,
       explanation: route.routeExplanation,
       warnings: route.warnings,
     },
+    routeFallbackReason: resolvedRoute.fallbackReason,
+    routeLine: resolvedRoute.geometry,
+    routingProvider: resolvedRoute.provider,
     stops: stopDetails,
     volunteer: {
       name: volunteer

@@ -455,6 +455,26 @@ export const routes = pgTable(
     ).notNull(),
     routeExplanation: text("route_explanation").notNull(),
     warnings: text("warnings").array().notNull(),
+    routeGeometry:
+      jsonb("route_geometry").$type<Array<readonly [number, number]>>(),
+    routeDirections: jsonb("route_directions").$type<
+      Array<{
+        distanceMeters: number;
+        durationSeconds: number;
+        steps: Array<{
+          distanceMeters: number;
+          durationSeconds: number;
+          instruction: string;
+          waypointRange: readonly [number, number] | null;
+        }>;
+      }>
+    >(),
+    routeDistanceMeters: integer("route_distance_meters"),
+    routeDurationSeconds: integer("route_duration_seconds"),
+    routeFallbackReason: text("route_fallback_reason"),
+    routedAt: timestamp("routed_at", { withTimezone: true }),
+    routingProvider: text("routing_provider"),
+    routingWaypointHash: text("routing_waypoint_hash"),
     dashboardAnchorSessionId: varchar("dashboard_anchor_session_id", {
       length: 64,
     }),

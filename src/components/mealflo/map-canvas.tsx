@@ -23,12 +23,13 @@ type MapCanvasProps = {
   initialView?: "markers" | "greater-victoria";
   markers: readonly MarkerPoint[];
   path?: readonly (readonly [number, number])[];
+  showNavigationControls?: boolean;
   showCenterControl?: boolean;
 };
 
 const GREATER_VICTORIA_BOUNDS = {
-  east: -123.18,
-  north: 48.72,
+  east: -123.27,
+  north: 48.69,
   south: 48.28,
   west: -123.75,
 };
@@ -94,6 +95,7 @@ export function MapCanvas({
   initialView = "markers",
   markers,
   path,
+  showNavigationControls = true,
   showCenterControl = false,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -148,7 +150,7 @@ export function MapCanvas({
                   markers[0]?.longitude ?? -123.3656,
                   markers[0]?.latitude ?? 48.4284,
                 ],
-          zoom: initialView === "greater-victoria" ? 9.45 : 11.5,
+          zoom: initialView === "greater-victoria" ? 9.8 : 11.5,
         });
         mapRef.current = map;
         resizeFrame = window.requestAnimationFrame(() => {
@@ -160,10 +162,12 @@ export function MapCanvas({
         return;
       }
 
-      map.addControl(
-        new maplibregl.NavigationControl({ showCompass: false }),
-        "top-right"
-      );
+      if (showNavigationControls) {
+        map.addControl(
+          new maplibregl.NavigationControl({ showCompass: false }),
+          "top-right"
+        );
+      }
       map.on("error", handleMapError);
 
       map.on("load", () => {
@@ -233,8 +237,8 @@ export function MapCanvas({
               [GREATER_VICTORIA_BOUNDS.east, GREATER_VICTORIA_BOUNDS.north],
             ],
             {
-              maxZoom: 10.8,
-              padding: 32,
+              maxZoom: 11.15,
+              padding: 18,
             }
           );
         } else if (!bounds.isEmpty()) {
@@ -257,7 +261,7 @@ export function MapCanvas({
 
       mapRef.current = null;
     };
-  }, [fallbackReason, initialView, markers, path]);
+  }, [fallbackReason, initialView, markers, path, showNavigationControls]);
 
   const centerMarker =
     markers.find((marker) => marker.id.includes("driver")) ?? markers[0];
@@ -375,7 +379,7 @@ export function MapCanvas({
           type="button"
           aria-label={centerControlLabel}
           title={centerControlLabel}
-          className="text-ink hover:border-line-strong absolute top-[88px] right-3 z-10 flex h-10 w-10 items-center justify-center rounded-[12px] border-[1.5px] border-[rgba(24,24,60,0.16)] bg-white shadow-sm transition-[transform,background-color,border-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 hover:bg-[rgba(255,255,255,0.92)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.55)]"
+          className="text-ink hover:border-line-strong absolute top-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-[12px] border-[1.5px] border-[rgba(24,24,60,0.16)] bg-white shadow-sm transition-[transform,background-color,border-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 hover:bg-[rgba(255,255,255,0.92)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.55)]"
           onClick={centerMap}
         >
           <MealfloIcon name="location-pin" size={22} />

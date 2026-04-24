@@ -9,6 +9,7 @@ const serverEnvSchema = z.object({
   GMAIL_REFRESH_TOKEN: z.string().optional(),
   GMAIL_USER_ID: z.string().optional(),
   MEALFLO_INGEST_SECRET: z.string().optional(),
+  MEALFLO_ROUTING_MODE: z.enum(["auto", "fallback"]).default("auto"),
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
@@ -90,6 +91,7 @@ export function parseServerEnv(raw: Record<string, string | undefined>) {
     mealfloIngestSecret,
     hasOpenAi: Boolean(openAiApiKey),
     hasRouting: Boolean(openRouteServiceApiKey),
+    routingMode: parsed.MEALFLO_ROUTING_MODE,
   };
 }
 

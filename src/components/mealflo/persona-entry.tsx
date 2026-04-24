@@ -36,7 +36,7 @@ function RoleLink({
     <Link
       href={href as ComponentProps<typeof Link>["href"]}
       className={cn(
-        "mf-sheen border-line hover:border-line-strong grid min-h-[210px] gap-5 rounded-[20px] border-[1.5px] bg-white p-5 text-left transition-[transform,border-color,background-color] duration-[var(--mf-duration-slow)] ease-[var(--mf-ease-spring)] hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[rgba(120,144,250,0.55)]",
+        "mf-sheen border-line hover:border-line-strong grid min-h-[210px] gap-5 rounded-[20px] border-[1.5px] bg-white p-5 text-left transition-[transform,border-color,background-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[rgba(120,144,250,0.55)]",
         className
       )}
     >
@@ -58,8 +58,8 @@ export function PersonaEntry({ integrations }: PersonaEntryProps) {
       className="bg-bg min-h-screen px-3 py-4 sm:px-4 lg:px-5"
     >
       <div className="border-line relative mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-[1760px] flex-col gap-8 rounded-[24px] border-[1.5px] bg-[linear-gradient(180deg,rgba(250,226,120,0.24)_0%,rgba(255,255,255,0)_74%)] p-5 sm:p-7 lg:p-9">
-        <span className="border-line text-muted absolute top-5 left-5 rounded-full border-[1.5px] bg-white/70 px-3 py-1 text-sm font-semibold sm:top-7 sm:left-7 lg:top-9 lg:left-9">
-          demo
+        <span className="border-line text-muted absolute top-5 left-5 rounded-full border-[1.5px] bg-white/70 px-3 py-1 text-sm font-semibold tracking-[0.1em] sm:top-7 sm:left-7 lg:top-9 lg:left-9">
+          DEMO
         </span>
         <section className="grid flex-1 content-center items-start gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(480px,0.82fr)]">
           <div className="flex h-full items-center justify-start pt-10 sm:pt-12 lg:pt-0">
@@ -67,6 +67,7 @@ export function PersonaEntry({ integrations }: PersonaEntryProps) {
               iconSize={136}
               iconClassName="!size-[92px] sm:!size-[136px]"
               className="max-w-full flex-col items-start gap-0 text-left sm:gap-1"
+              showIcon={false}
               showSubtitle={false}
               swatchClassName="!size-[92px] sm:!size-[136px]"
               swatchSize={136}

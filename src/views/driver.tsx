@@ -1,21 +1,19 @@
-import { Suspense } from "react";
-
-import { Badge } from "@/components/mealflo/badge";
 import { DriverMobileFlow } from "@/components/mealflo/driver-mobile-flow";
 import { MealfloLogo } from "@/components/mealflo/logo";
-import { PersonaLabel } from "@/components/mealflo/persona-label";
 import { cn } from "@/lib/utils";
 import { getDriverOfferData } from "@/server/mealflo/backend";
 
 function DriverTopBar() {
   return (
-    <div className="mf-enter flex shrink-0 items-center justify-between gap-3 px-1">
-      <MealfloLogo iconSize={42} showSubtitle={false} swatchSize={58} />
-      <Badge tone="info">
-        <Suspense fallback="Rosa">
-          <PersonaLabel display="name" role="driver" />
-        </Suspense>
-      </Badge>
+    <div className="mf-enter flex w-full shrink-0 items-center px-1 py-1">
+      <MealfloLogo
+        className="mx-auto gap-2.5"
+        iconSize={34}
+        showSubtitle={false}
+        swatchClassName="bg-transparent border-transparent"
+        swatchSize={38}
+        textClassName="text-[26px] leading-none tracking-[-0.025em]"
+      />
     </div>
   );
 }

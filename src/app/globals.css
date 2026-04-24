@@ -225,6 +225,25 @@ textarea {
   outline-offset: 3px;
 }
 
+/*
+  Tailwind v4 implements translate/scale/rotate as individual CSS properties.
+  Our custom transition-[transform,...] utilities need to include those
+  properties too, or hover lifts snap instead of easing.
+*/
+.transition-\[transform\,background-color\,border-color\],
+.transition-\[transform\,background-color\,border-color\,color\],
+.transition-\[transform\,background-color\,border-color\,color\,opacity\],
+.transition-\[transform\,background-color\,border-color\,opacity\],
+.transition-\[transform\,border-color\,background-color\],
+.transition-\[transform\,border-color\,background-color\,box-shadow\],
+.transition-\[background-color\,transform\],
+.transition-\[background-color\,border-color\,transform\],
+.transition-\[border-color\,background-color\,transform\] {
+  transition-property:
+    transform, translate, scale, rotate, background-color, border-color, color,
+    opacity, box-shadow;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -286,10 +305,57 @@ textarea {
   transform: translateX(0%);
 }
 
+.mf-control-feedback {
+  animation: mf-control-feedback var(--mf-duration-base) var(--mf-ease-out) both;
+}
+
+.mf-live-dot {
+  position: relative;
+  display: inline-flex;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--mf-color-green-300);
+}
+
+.mf-live-dot::before {
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  background: rgba(78, 173, 111, 0.32);
+  content: "";
+  animation: mf-live-pulse 2.4s var(--mf-ease-out) infinite;
+}
+
 @keyframes mf-enter {
   from {
     opacity: 0;
     transform: translate3d(0, 14px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes mf-live-pulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.72);
+  }
+
+  68%,
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+@keyframes mf-control-feedback {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
   }
 
   to {

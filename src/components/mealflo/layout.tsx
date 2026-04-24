@@ -73,7 +73,7 @@ export function TopBar({
         />
         <nav
           aria-label="Primary"
-          className="flex flex-wrap items-center justify-start gap-2 lg:justify-start"
+          className="flex flex-wrap items-center justify-start gap-2 lg:justify-end"
         >
           {nav.map((item) => (
             <NavLink

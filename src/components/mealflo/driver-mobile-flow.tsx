@@ -54,15 +54,18 @@ function formatAvailabilityLabel(minutes: number) {
     return "1 hr";
   }
 
-  if (minutes % 60 === 30) {
-    return `${Math.floor(minutes / 60)}:30`;
-  }
-
   if (minutes % 60 === 0) {
     return `${minutes / 60} hr`;
   }
 
-  return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours > 0) {
+    return `${hours} hr ${remainingMinutes} min`;
+  }
+
+  return `${remainingMinutes} min`;
 }
 
 function getDeviceFingerprint() {
@@ -87,24 +90,10 @@ function getRouteStart(routeLine: ReadonlyArray<readonly [number, number]>) {
   };
 }
 
-function firstOpenStopIndex(route: DriverRouteOption) {
-  const index = route.stops.findIndex((stop) => stop.status !== "delivered");
-
-  return index >= 0 ? index : route.stops.length;
-}
-
-function initialCompletedStops(route: DriverRouteOption) {
-  return Object.fromEntries(
-    route.stops
-      .filter((stop) => stop.status === "delivered")
-      .map((stop) => [stop.id, "delivered" as StopOutcome])
-  );
-}
-
 function readStoredProgress(route: DriverRouteOption): StoredProgress {
   const baseline = {
-    completedStops: initialCompletedStops(route),
-    currentStopIndex: firstOpenStopIndex(route),
+    completedStops: {},
+    currentStopIndex: 0,
   };
 
   try {
@@ -151,16 +140,21 @@ function getStopWarnings(stop: DriverRouteStop) {
     : ["Standard handoff"];
 }
 
-function pickRoute(
-  routes: DriverRouteOption[],
-  minutesAvailable: number,
-  personaId: string
+function getCurrentRouteDirection(
+  route: DriverRouteOption,
+  currentStopIndex: number
 ) {
-  const personaRoutes = routes.filter(
-    (route) => route.volunteer.id === personaId
+  return (
+    route.routeDirections.find(
+      (direction) => direction.segmentIndex >= currentStopIndex
+    ) ??
+    route.routeDirections[0] ??
+    null
   );
-  const pool = personaRoutes.length > 0 ? personaRoutes : routes;
-  const fitting = pool
+}
+
+function pickRoute(routes: DriverRouteOption[], minutesAvailable: number) {
+  const fitting = routes
     .filter((route) => route.plannedTotalMinutes <= minutesAvailable)
     .sort(
       (left, right) =>
@@ -170,7 +164,7 @@ function pickRoute(
 
   return (
     fitting[0] ??
-    pool
+    routes
       .slice()
       .sort(
         (left, right) =>
@@ -251,16 +245,18 @@ function MetricStrip({
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className="grid grid-cols-4 divide-x divide-[rgba(24,24,60,0.12)] rounded-[16px] border-y-[1.5px] border-[rgba(24,24,60,0.12)] bg-[rgba(255,253,240,0.46)]">
       {items.map((item) => (
         <div
           key={item.label}
-          className="border-line rounded-[14px] border-[1.5px] bg-white/82 px-2 py-3 text-center"
+          className="px-2 py-3 text-center"
         >
-          <p className="font-display text-ink text-[22px] font-semibold tracking-[-0.02em]">
+          <p className="font-display text-ink text-[23px] leading-none font-semibold tracking-[-0.02em]">
             {item.value}
           </p>
-          <p className="text-muted text-[12px] font-medium">{item.label}</p>
+          <p className="text-muted mt-1 text-[12px] font-medium">
+            {item.label}
+          </p>
         </div>
       ))}
     </div>
@@ -358,6 +354,7 @@ function RouteMap({
       markers={markers}
       path={route.routeLine}
       showCenterControl
+      showNavigationControls={false}
     >
       {children}
     </MapCanvas>
@@ -376,7 +373,6 @@ function RouteOfferSummary({
       <div className="flex items-start gap-3">
         <MealfloIcon name="route-road" size={64} />
         <div className="min-w-0 space-y-1">
-          <Badge tone="success">Recommended</Badge>
           <h1 className="font-display text-ink text-[34px] leading-[1.04] font-bold tracking-[-0.03em]">
             {route.name}
           </h1>
@@ -431,9 +427,6 @@ function DriverMobileFlowReady({
     [data.routeOptions, data.suggestedRoute.routeId, initialRouteId]
   );
   const [selectedMinutes, setSelectedMinutes] = useState(60);
-  const [selectedPersonaId, setSelectedPersonaId] = useState(
-    initialRoute.volunteer.id
-  );
   const [selectedRouteId, setSelectedRouteId] = useState(initialRoute.id);
   const selectedRoute = useMemo(
     () =>
@@ -445,14 +438,11 @@ function DriverMobileFlowReady({
   const [showAlternates, setShowAlternates] = useState(false);
   const [completedStops, setCompletedStops] = useState<
     Record<string, StopOutcome>
-  >(() => initialCompletedStops(initialRoute));
-  const [currentStopIndex, setCurrentStopIndex] = useState(
-    firstOpenStopIndex(initialRoute)
-  );
+  >({});
+  const [currentStopIndex, setCurrentStopIndex] = useState(0);
   const [currentPosition, setCurrentPosition] = useState(() =>
     getRouteStart(initialRoute.routeLine)
   );
-  const [isAnchor, setIsAnchor] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [isStartingSession, setIsStartingSession] = useState(false);
   const [locationMode, setLocationMode] = useState<LocationMode>("idle");
@@ -461,7 +451,7 @@ function DriverMobileFlowReady({
   const [statusText, setStatusText] = useState(
     "Choose your time window to see the best route."
   );
-  const [isStopSheetOpen, setIsStopSheetOpen] = useState(false);
+  const [isStopSheetOpen, setIsStopSheetOpen] = useState(true);
   const locationModeRef = useRef<LocationMode>("idle");
   const lastLocationRef = useRef(getRouteStart(initialRoute.routeLine));
   const currentStopIndexRef = useRef(currentStopIndex);
@@ -484,6 +474,10 @@ function DriverMobileFlowReady({
   );
   const routeComplete = currentStopIndex >= selectedRoute.stops.length;
   const currentStopPhone = currentStop?.phone ?? selectedRoute.volunteer.phone;
+  const currentDirection = getCurrentRouteDirection(
+    selectedRoute,
+    currentStopIndex
+  );
   const locationLabel =
     locationMode === "gps"
       ? "GPS live"
@@ -513,7 +507,6 @@ function DriverMobileFlowReady({
       setCurrentStopIndex(stored.currentStopIndex);
       setCurrentPosition(start);
       setSessionId(null);
-      setIsAnchor(false);
       setIsStopSheetOpen(false);
       setStatusText(
         stored.currentStopIndex >= selectedRoute.stops.length
@@ -618,7 +611,6 @@ function DriverMobileFlowReady({
         throw new Error(payload.error ?? "Location update missed.");
       }
 
-      setIsAnchor(payload.data.isAnchor);
     },
     []
   );
@@ -679,7 +671,6 @@ function DriverMobileFlowReady({
         throw new Error(payload.error ?? "Route session could not start.");
       }
 
-      setIsAnchor(payload.data.isAnchor);
       setSessionId(payload.data.id);
       sessionIdRef.current = payload.data.id;
       setStatusText(
@@ -817,24 +808,32 @@ function DriverMobileFlowReady({
   }, [heartbeat, preferGps, sessionId]);
 
   const applyAvailability = (minutes: number) => {
-    const route = pickRoute(data.routeOptions, minutes, selectedPersonaId);
+    const route = pickRoute(data.routeOptions, minutes);
     setSelectedMinutes(minutes);
     setSelectedRouteId(route.id);
   };
 
-  const applyPersona = (personaId: string) => {
-    const route = pickRoute(data.routeOptions, selectedMinutes, personaId);
-    setSelectedPersonaId(personaId);
-    setSelectedRouteId(route.id);
-  };
-
   const chooseAlternateRoute = (route: DriverRouteOption) => {
-    setSelectedPersonaId(route.volunteer.id);
     setSelectedRouteId(route.id);
     setShowAlternates(false);
   };
 
+  const resetPhoneRouteProgress = () => {
+    const start = getRouteStart(selectedRoute.routeLine);
+
+    currentStopIndexRef.current = 0;
+    deliveredCountRef.current = 0;
+    lastLocationRef.current = start;
+    demoStepRef.current = 0;
+    setCompletedStops({});
+    setCurrentStopIndex(0);
+    setCurrentPosition(start);
+    window.localStorage.removeItem(progressKey(selectedRoute.id));
+  };
+
   const acceptRoute = async () => {
+    resetPhoneRouteProgress();
+    setIsStopSheetOpen(true);
     setScreen("active");
     await startSession();
   };
@@ -903,15 +902,9 @@ function DriverMobileFlowReady({
   };
 
   const resetLocalProgress = () => {
-    const baseline = {
-      completedStops: initialCompletedStops(selectedRoute),
-      currentStopIndex: firstOpenStopIndex(selectedRoute),
-    };
-    setCompletedStops(baseline.completedStops);
-    setCurrentStopIndex(baseline.currentStopIndex);
-    window.localStorage.removeItem(progressKey(selectedRoute.id));
+    resetPhoneRouteProgress();
     setScreen("offer");
-    setStatusText("This phone is reset for the route.");
+    setStatusText("Route ready on this phone.");
   };
 
   const resetRouteForDemo = async () => {
@@ -939,7 +932,6 @@ function DriverMobileFlowReady({
       endSession(sessionIdRef.current);
       sessionIdRef.current = null;
       setSessionId(null);
-      setIsAnchor(false);
       setCompletedStops({});
       setCurrentStopIndex(0);
       setCurrentPosition(getRouteStart(selectedRoute.routeLine));
@@ -954,24 +946,24 @@ function DriverMobileFlowReady({
   };
 
   const switchDriverForDemo = () => {
-    const currentIndex = data.personas.findIndex(
-      (persona) => persona.id === selectedPersonaId
+    const currentIndex = data.routeOptions.findIndex(
+      (route) => route.id === selectedRoute.id
     );
-    const nextPersona =
-      data.personas[(currentIndex + 1) % data.personas.length] ??
-      data.personas[0];
+    const nextRoute =
+      data.routeOptions[(currentIndex + 1) % data.routeOptions.length] ??
+      data.routeOptions[0];
 
-    if (!nextPersona) {
-      setStatusText("No other driver is ready.");
+    if (!nextRoute) {
+      setStatusText("No other route is ready.");
       return;
     }
 
     endSession(sessionIdRef.current);
     sessionIdRef.current = null;
     setSessionId(null);
-    applyPersona(nextPersona.id);
+    setSelectedRouteId(nextRoute.id);
     setScreen("offer");
-    setStatusText(`${nextPersona.label} is ready to accept a route.`);
+    setStatusText(`${nextRoute.volunteer.name} is ready to accept a route.`);
   };
 
   const toggleLocationForDemo = () => {
@@ -987,8 +979,9 @@ function DriverMobileFlowReady({
 
   useEffect(() => {
     const handleControl = (event: Event) => {
-      const action = (event as CustomEvent<{ action?: DemoDriverControlAction }>)
-        .detail?.action;
+      const action = (
+        event as CustomEvent<{ action?: DemoDriverControlAction }>
+      ).detail?.action;
 
       if (action === "advance-stop") {
         void completeStop("delivered");
@@ -1075,13 +1068,15 @@ function DriverMobileFlowReady({
 
   if (screen === "availability") {
     return (
-      <section className={phoneScrollScreenClass}>
-        <div className="space-y-5">
-          <div className="flex items-start gap-4 px-1">
-            <MealfloIcon name="clock" size={66} />
-            <h1 className="font-display text-ink text-[40px] leading-[1.02] font-bold tracking-[-0.03em]">
-              How much time do you have?
-            </h1>
+      <section className="mf-enter flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+        <div className="space-y-3">
+          <div className="flex items-start gap-3 px-1">
+            <MealfloIcon name="clock" size={54} />
+            <div className="min-w-0 space-y-2">
+              <h1 className="font-display text-ink text-[36px] leading-[1.02] font-bold tracking-[-0.03em]">
+                How much time do you have?
+              </h1>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {data.availabilityOptions.map((minutes) => (
@@ -1089,10 +1084,10 @@ function DriverMobileFlowReady({
                 key={minutes}
                 type="button"
                 onClick={() => applyAvailability(minutes)}
-                className="min-h-[64px] rounded-[18px] text-left"
+                className="min-h-[70px] rounded-[18px] text-left transition-transform duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.55)]"
               >
                 <ChoiceChip
-                  className="h-full w-full justify-center rounded-[18px] text-[18px]"
+                  className="font-display h-full w-full justify-center rounded-[18px] text-[21px] font-semibold tracking-[-0.01em]"
                   selected={selectedMinutes === minutes}
                 >
                   {formatAvailabilityLabel(minutes)}
@@ -1102,45 +1097,48 @@ function DriverMobileFlowReady({
           </div>
         </div>
 
-        <section className="border-line space-y-4 border-t-[1.5px] pt-4">
-          <div className="space-y-1">
-            <h2 className="font-display text-ink text-[26px] font-semibold tracking-[-0.02em]">
-              Driver
-            </h2>
+        <section className="border-line min-h-0 flex-1 space-y-4 overflow-hidden rounded-[18px] border-[1.5px] bg-white/72 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <h2 className="font-display text-ink text-[27px] leading-tight font-semibold tracking-[-0.02em]">
+                {selectedRoute.name}
+              </h2>
+            </div>
           </div>
-          <div className="grid gap-2">
-            {data.personas.map((persona) => (
-              <button
-                key={persona.id}
-                type="button"
-                onClick={() => applyPersona(persona.id)}
-                className="rounded-[16px] text-left"
-              >
-                <span
-                  className={cn(
-                    "flex min-h-[58px] items-center gap-3 rounded-[16px] border-[1.5px] px-3 py-2 transition-[border-color,background-color,transform] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)]",
-                    selectedPersonaId === persona.id
-                      ? "border-[rgba(120,144,250,0.35)] bg-[var(--mf-color-blue-50)]"
-                      : "border-line bg-white"
-                  )}
-                >
-                  <MealfloIcon name="user-profile" size={32} />
-                  <span>
-                    <span className="text-ink block font-medium">
-                      {persona.label}
-                    </span>
-                    <span className="text-muted block text-sm leading-5">
-                      {persona.note}
-                    </span>
-                  </span>
-                </span>
-              </button>
-            ))}
+
+          <div className="grid grid-cols-3 divide-x divide-[rgba(24,24,60,0.1)] rounded-[16px] border-[1.5px] border-[rgba(24,24,60,0.1)] bg-[rgba(240,243,255,0.6)]">
+            <div className="px-3 py-3">
+              <p className="font-display text-ink text-[23px] leading-none font-semibold">
+                {selectedRoute.stopCount}
+              </p>
+              <p className="text-muted mt-1 text-xs font-medium">stops</p>
+            </div>
+            <div className="px-3 py-3">
+              <p className="font-display text-ink text-[23px] leading-none font-semibold">
+                {selectedRoute.totalPlannedTime}
+              </p>
+              <p className="text-muted mt-1 text-xs font-medium">planned</p>
+            </div>
+            <div className="px-3 py-3">
+              <p className="font-display text-ink text-[23px] leading-none font-semibold">
+                {selectedRoute.driveTime}
+              </p>
+              <p className="text-muted mt-1 text-xs font-medium">driving</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-display text-ink text-[20px] font-semibold tracking-[-0.01em]">
+              {selectedRoute.area}
+            </p>
+            <p className="text-muted text-sm leading-6">
+              First stop: {selectedRoute.firstStop}.{" "}
+              {displayDriverLabel(selectedRoute.coldChainNote)}
+            </p>
           </div>
         </section>
 
         <Button
-          className="mt-auto"
           fullWidth
           onClick={() => setScreen("offer")}
           size="lg"
@@ -1169,6 +1167,19 @@ function DriverMobileFlowReady({
               {displayDriverLabel(selectedRoute.coldChainNote)}
             </p>
           </div>
+          {selectedRoute.routeDirections.length > 0 ? (
+            <div className="border-line flex items-start gap-3 border-t-[1.5px] pt-4">
+              <MealfloIcon name="route-road" size={30} />
+              <div className="min-w-0">
+                <p className="text-muted text-sm font-medium">
+                  First direction
+                </p>
+                <p className="text-ink mt-1 text-base leading-6 font-medium">
+                  {selectedRoute.routeDirections[0]?.instruction}
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <RouteMap
@@ -1238,16 +1249,9 @@ function DriverMobileFlowReady({
             tone="surface"
           />
           <div className="space-y-3">
-            <Badge tone={isAnchor ? "success" : "info"}>
-              {isAnchor ? "Dashboard updated" : "Local route complete"}
-            </Badge>
             <h1 className="font-display text-ink text-[44px] leading-[0.98] font-bold tracking-[-0.04em]">
-              All stops handled
+              Thank you!
             </h1>
-            <p className="text-muted text-[17px] leading-7">
-              {deliveredCount} delivered on this phone. Dispatch can reopen the
-              route if another pass is needed.
-            </p>
           </div>
           <MetricStrip remainingCount={0} route={selectedRoute} />
         </Card>
@@ -1266,15 +1270,7 @@ function DriverMobileFlowReady({
             size="lg"
             variant="warm"
           >
-            Reset this phone
-          </Button>
-          <Button
-            fullWidth
-            onClick={() => setScreen("availability")}
-            size="lg"
-            variant="secondary"
-          >
-            Change time
+            Restart demo
           </Button>
         </div>
       </section>
@@ -1394,16 +1390,13 @@ function DriverMobileFlowReady({
               size="lg"
               variant="danger"
               disabled={isCompleting || isStartingSession}
-            >
-              Couldn&apos;t
-            </Button>
-          </div>
-          <p role="status" className="text-muted text-center text-sm leading-6">
-            {statusText}
-          </p>
+          >
+            Couldn&apos;t
+          </Button>
         </div>
-      </section>
-    );
+      </div>
+    </section>
+  );
   }
 
   return (
@@ -1415,6 +1408,11 @@ function DriverMobileFlowReady({
           currentStop={currentStop}
           route={selectedRoute}
         />
+
+        <div className="absolute top-3 left-3 z-20 flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] border-white/75 bg-white/90 shadow-[0_8px_22px_rgba(24,24,60,0.13)]">
+          <span className="mf-live-dot" aria-hidden="true" />
+          <span className="sr-only">Live on dashboard</span>
+        </div>
 
         <div className="border-line absolute inset-x-0 bottom-0 z-20 rounded-t-[24px] border-x-0 border-t-[1.5px] bg-white px-3 pt-2 pb-[calc(10px+env(safe-area-inset-bottom))] shadow-[0_-14px_34px_rgba(24,24,60,0.14)] transition-[padding,box-shadow] duration-[var(--mf-duration-slow)] ease-[var(--mf-ease-spring)]">
           <button
@@ -1429,25 +1427,54 @@ function DriverMobileFlowReady({
             </span>
           </button>
 
-          <div className="grid grid-cols-[1fr_auto] items-start gap-3">
-            <div className="min-w-0 space-y-1">
+          <div className="min-w-0 space-y-1">
+            <h1 className="font-display text-ink truncate text-[27px] leading-[1.02] font-bold tracking-[-0.03em]">
+              {currentStop?.name}
+            </h1>
+            <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+              <div
+                className={cn(
+                  "grid min-w-0 transition-[grid-template-rows,opacity] duration-[var(--mf-duration-slow)] ease-[var(--mf-ease-out)]",
+                  isStopSheetOpen
+                    ? "grid-rows-[1fr] opacity-100"
+                    : "grid-rows-[0fr] opacity-0"
+                )}
+                aria-hidden={!isStopSheetOpen}
+              >
+                <p className="text-muted min-h-0 overflow-hidden truncate text-sm leading-5">
+                  {currentStop?.address}
+                </p>
+              </div>
               <Badge tone="warning">
                 Stop {currentStopIndex + 1} of {selectedRoute.stops.length}
               </Badge>
-              <h1 className="font-display text-ink truncate text-[27px] leading-[1.02] font-bold tracking-[-0.03em]">
-                {currentStop?.name}
-              </h1>
-              {isStopSheetOpen ? (
-                <p className="text-muted truncate text-sm leading-5">
-                  {currentStop?.address}
-                </p>
-              ) : null}
             </div>
-            <MealfloIcon name="location-pin" size={38} />
           </div>
 
-          {isStopSheetOpen ? (
-            <>
+          <div
+            className={cn(
+              "grid transition-[grid-template-rows,opacity] duration-[var(--mf-duration-slow)] ease-[var(--mf-ease-spring)]",
+              isStopSheetOpen
+                ? "grid-rows-[1fr] opacity-100"
+                : "grid-rows-[0fr] opacity-0"
+            )}
+            aria-hidden={!isStopSheetOpen}
+          >
+            <div className="min-h-0 overflow-hidden">
+              {currentDirection ? (
+                <div className="mt-3 flex items-start gap-3 rounded-[14px] border-[1.5px] border-[rgba(120,144,250,0.22)] bg-[rgba(240,243,255,0.7)] px-3 py-2.5">
+                  <MealfloIcon name="route-road" size={28} />
+                  <div className="min-w-0">
+                    <p className="text-muted text-xs leading-4 font-medium">
+                      Next direction · {currentDirection.distance}
+                    </p>
+                    <p className="text-ink mt-0.5 line-clamp-2 text-sm leading-5 font-medium">
+                      {currentDirection.instruction}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="mt-3">
                 <ProgressDots
                   completedStops={completedStops}
@@ -1458,24 +1485,24 @@ function DriverMobileFlowReady({
 
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <CallButton
-                  className="h-11 min-h-11 text-sm"
+                  className="h-12 min-h-12 text-base"
                   phone={currentStopPhone}
                   variant="secondary"
                 />
                 <Button
-                  className="h-11 min-h-11 text-sm"
+                  className="h-12 min-h-12 text-base"
                   fullWidth
                   onClick={() => setScreen("stop")}
                   size="md"
                   variant="primary"
                 >
-                  Stop details
+                  Details
                 </Button>
               </div>
 
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <Button
-                  className="h-11 min-h-11 text-sm"
+                  className="h-12 min-h-12 text-base"
                   fullWidth
                   onClick={() => completeStop("delivered")}
                   size="md"
@@ -1485,25 +1512,18 @@ function DriverMobileFlowReady({
                   Delivered
                 </Button>
                 <Button
-                  className="h-11 min-h-11 text-sm"
+                  className="h-12 min-h-12 text-base"
                   fullWidth
                   onClick={() => completeStop("could_not_deliver")}
                   size="md"
                   variant="danger"
                   disabled={isCompleting || isStartingSession}
                 >
-                  couldn&apos;t deliver
+                  Couldn&apos;t deliver
                 </Button>
               </div>
-
-              <p
-                role="status"
-                className="text-muted mt-2 truncate text-center text-xs leading-5"
-              >
-                {statusText}
-              </p>
-            </>
-          ) : null}
+            </div>
+          </div>
         </div>
       </div>
     </section>

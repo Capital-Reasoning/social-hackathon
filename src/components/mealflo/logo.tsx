@@ -11,6 +11,7 @@ type LogoProps = {
   iconClassName?: string;
   iconSize?: number;
   light?: boolean;
+  showIcon?: boolean;
   showSubtitle?: boolean;
   swatchClassName?: string;
   swatchSize?: number;
@@ -23,6 +24,7 @@ export function MealfloLogo({
   iconClassName,
   iconSize = 34,
   light = false,
+  showIcon = true,
   showSubtitle = true,
   swatchClassName,
   swatchSize = 50,
@@ -33,20 +35,22 @@ export function MealfloLogo({
       href={href}
       className={cn("inline-flex items-center gap-3", className)}
     >
-      <IconSwatch
-        name="meal-container"
-        decorative={false}
-        framed={light}
-        label="mealflo"
-        size={iconSize}
-        swatchSize={swatchSize}
-        tone={light ? "warm" : "surface"}
-        iconClassName={iconClassName}
-        className={cn(
-          light ? "border-white/18 bg-white/14" : undefined,
-          swatchClassName
-        )}
-      />
+      {showIcon ? (
+        <IconSwatch
+          name="meal-container"
+          decorative={false}
+          framed={light}
+          label="mealflo"
+          size={iconSize}
+          swatchSize={swatchSize}
+          tone={light ? "warm" : "surface"}
+          iconClassName={iconClassName}
+          className={cn(
+            light ? "border-white/18 bg-white/14" : undefined,
+            swatchClassName
+          )}
+        />
+      ) : null}
       <div className="min-w-0">
         <p
           className={cn(

@@ -1,7 +1,12 @@
 "use client";
 
-import { Suspense, type ComponentProps, type FormEvent } from "react";
-import { useState } from "react";
+import {
+  type ComponentProps,
+  type FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -10,7 +15,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/mealflo/button";
 import { Field, Input, Select, Textarea } from "@/components/mealflo/field";
 import { MealfloIcon, type IconName } from "@/components/mealflo/icon";
-import { PersonaLabel } from "@/components/mealflo/persona-label";
 import {
   demoDriverControlEvent,
   demoInboundPayloads,
@@ -55,8 +59,8 @@ const controlButtons = [
     id: "driver",
     action: "switch-driver",
     icon: "delivery-van",
-    label: "Switch driver",
-    message: "Driver persona rotated.",
+    label: "Switch route",
+    message: "Route view changed.",
     roles: ["driver"] as DemoRole[],
   },
   {
@@ -115,7 +119,7 @@ const defaultRequestForm: RequestFormState = {
 };
 
 const driverControlHints: Record<string, string> = {
-  driver: "Rotate the phone to another driver",
+  driver: "Show another route",
   "demo-reset": "Restore seed data across the app",
   gps: "Switch between phone GPS and fake movement",
   "route-reset": "Clear this route for another run",
@@ -123,34 +127,47 @@ const driverControlHints: Record<string, string> = {
 };
 
 function DriverControlPanel({
-  activeControlId,
+  confirmedControlId,
   controls,
   pendingControlId,
-  message,
   onControl,
 }: {
-  activeControlId: string | null;
+  confirmedControlId: string | null;
   controls: readonly DemoControl[];
   pendingControlId: string | null;
-  message: string;
   onControl: (control: DemoControl) => void;
 }) {
   return (
-    <div className="grid w-full max-w-[460px] gap-3">
+    <div className="grid w-full max-w-[460px] gap-4">
+      <div className="space-y-1">
+        <h2
+          className="font-display text-[1.55rem] leading-tight font-semibold tracking-[-0.02em]"
+          style={{ color: "rgba(255,255,255,0.94)" }}
+        >
+          Driver demo controls
+        </h2>
+        <p className="text-sm leading-6 text-white/58">
+          Run one stage action at a time.
+        </p>
+      </div>
       {controls.map((control) => {
-        const active = activeControlId === control.id;
+        const pending = pendingControlId === control.id;
+        const confirmed = confirmedControlId === control.id;
+        const hint = pending
+          ? "Working"
+          : confirmed
+            ? control.message
+            : driverControlHints[control.id];
 
         return (
           <button
             key={control.id}
             type="button"
-            disabled={pendingControlId === control.id}
+            disabled={pending}
             className={cn(
-              "grid min-h-[76px] grid-cols-[54px_1fr] items-center gap-4 rounded-[10px] border px-4 py-3 text-left transition-[transform,background-color,border-color,box-shadow] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60",
-              active
-                ? "border-[#ffe47a]/70 bg-[#ffe47a]/18 shadow-[0_0_0_1px_rgba(255,228,122,0.18),0_18px_36px_rgba(0,0,0,0.24)]"
-                : "border-white/14 bg-white/10 shadow-[0_14px_28px_rgba(0,0,0,0.18)] hover:-translate-y-0.5 hover:border-white/24 hover:bg-white/15",
-              pendingControlId === control.id && "cursor-wait opacity-70"
+              "grid min-h-[76px] grid-cols-[54px_1fr_28px] items-center gap-4 rounded-[10px] border border-white/14 bg-white/10 px-4 py-3 text-left shadow-[0_14px_28px_rgba(0,0,0,0.18)] transition-[transform,background-color,border-color,opacity] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 hover:border-white/24 hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60",
+              confirmed && "border-[#88d5bd]/40 bg-[#88d5bd]/12",
+              pending && "cursor-wait opacity-70"
             )}
             onClick={() => onControl(control)}
           >
@@ -161,24 +178,30 @@ function DriverControlPanel({
               <span className="block text-[1.18rem] leading-tight font-semibold text-white">
                 {control.label}
               </span>
-              <span className="mt-1 block text-sm leading-snug text-white/64">
-                {driverControlHints[control.id]}
+              <span
+                key={`${control.id}-${hint}`}
+                className={cn(
+                  "mf-control-feedback mt-1 block text-sm leading-snug transition-colors duration-[var(--mf-duration-base)] ease-[var(--mf-ease-out)]",
+                  confirmed ? "text-[#a8ead5]" : "text-white/64"
+                )}
+              >
+                {hint}
               </span>
+            </span>
+            <span
+              aria-hidden={!confirmed}
+              className={cn(
+                "grid size-7 place-items-center rounded-full transition-[opacity,transform] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)]",
+                confirmed
+                  ? "scale-100 bg-[#88d5bd]/14 opacity-100"
+                  : "scale-75 opacity-0"
+              )}
+            >
+              <MealfloIcon name="checkmark-circle" size={22} />
             </span>
           </button>
         );
       })}
-      <div
-        aria-live="polite"
-        className={cn(
-          "min-h-[76px] rounded-[10px] border px-4 py-3 text-sm leading-snug font-medium transition-[opacity,background-color,border-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-standard)]",
-          message === "Shell ready."
-            ? "border-white/8 bg-white/5 text-white/45"
-            : "border-[#88d5bd]/35 bg-[#88d5bd]/12 text-white/82"
-        )}
-      >
-        {message === "Shell ready." ? "Choose a driver action." : message}
-      </div>
     </div>
   );
 }
@@ -222,14 +245,37 @@ export function DemoShell({
 }: DemoShellProps) {
   const router = useRouter();
   const [message, setMessage] = useState("Shell ready.");
-  const [activeControlId, setActiveControlId] = useState<string | null>(null);
+  const [confirmedControlId, setConfirmedControlId] = useState<string | null>(
+    null
+  );
   const [pendingControlId, setPendingControlId] = useState<string | null>(null);
   const [requestForm, setRequestForm] =
     useState<RequestFormState>(defaultRequestForm);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const confirmedTimeoutRef = useRef<number | null>(null);
   const visibleControls = controlButtons.filter((control) =>
     control.roles.includes(activeRole)
   );
+
+  useEffect(() => {
+    return () => {
+      if (confirmedTimeoutRef.current) {
+        window.clearTimeout(confirmedTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const brieflyConfirmControl = (controlId: string) => {
+    if (confirmedTimeoutRef.current) {
+      window.clearTimeout(confirmedTimeoutRef.current);
+    }
+
+    setConfirmedControlId(controlId);
+    confirmedTimeoutRef.current = window.setTimeout(() => {
+      setConfirmedControlId(null);
+      confirmedTimeoutRef.current = null;
+    }, 1800);
+  };
 
   const clearDriverProgress = () => {
     for (const key of Object.keys(window.localStorage)) {
@@ -251,7 +297,7 @@ export function DemoShell({
   };
 
   const runControl = async (control: DemoControl) => {
-    setActiveControlId(control.id);
+    setConfirmedControlId(null);
     setPendingControlId(control.id);
     setMessage("Working.");
 
@@ -282,6 +328,7 @@ export function DemoShell({
       }
 
       dispatchDriverControl(control.action);
+      brieflyConfirmControl(control.id);
       setMessage(control.message);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Control failed.");
@@ -292,7 +339,6 @@ export function DemoShell({
 
   const submitRequestForm = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setActiveControlId("new-request");
     setPendingControlId("new-request");
     setMessage("Saving request.");
 
@@ -357,10 +403,9 @@ export function DemoShell({
 
   const driverControls = visibleControls.length > 0 && (
     <DriverControlPanel
-      activeControlId={activeControlId}
+      confirmedControlId={confirmedControlId}
       controls={visibleControls}
       pendingControlId={pendingControlId}
-      message={message}
       onControl={(control) => {
         void runControl(control);
       }}
@@ -579,12 +624,6 @@ export function DemoShell({
                   );
                 })}
               </nav>
-              <div className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-medium text-white/82">
-                <MealfloIcon name="user-profile" size={22} />
-                <Suspense fallback="Persona">
-                  <PersonaLabel role={activeRole} />
-                </Suspense>
-              </div>
             </div>
             {!phoneViewport ? controls : null}
           </div>
@@ -608,7 +647,10 @@ export function DemoShell({
                   {driverControls}
                 </aside>
                 <div className="flex min-h-0 items-center justify-center lg:justify-center">
-                  <div className="relative h-full w-full max-w-[430px] lg:aspect-[2752/4195] lg:max-h-[calc(100vh-104px)] lg:w-auto lg:max-w-[min(45vw,590px)]">
+                  <div className="relative aspect-[2752/4195] h-[min(100%,calc(100vh-132px))] max-h-[860px] w-auto max-w-[min(88vw,590px)]">
+                    <div className="bg-bg absolute top-[4.9%] right-[16.7%] bottom-[4.2%] left-[16.7%] z-20 overflow-hidden rounded-[52px]">
+                      {children}
+                    </div>
                     <Image
                       src="/iphone-frame-modern.png"
                       alt=""
@@ -616,11 +658,8 @@ export function DemoShell({
                       fill
                       sizes="(min-width: 1024px) 45vw, 88vw"
                       priority
-                      className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-contain select-none lg:block"
+                      className="pointer-events-none absolute inset-0 z-0 h-full w-full object-contain select-none"
                     />
-                    <div className="bg-bg relative z-10 h-full overflow-hidden rounded-[12px] lg:absolute lg:top-[6.15%] lg:right-[17.8%] lg:bottom-[4.9%] lg:left-[17.8%] lg:h-auto lg:rounded-[46px]">
-                      {children}
-                    </div>
                   </div>
                 </div>
               </>

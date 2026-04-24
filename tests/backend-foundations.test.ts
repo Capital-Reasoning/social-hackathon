@@ -13,6 +13,7 @@ import {
   getAdminInventoryData,
   getAdminInboxData,
   getAdminRoutesData,
+  getDriverOfferData,
   markDraftOther,
   heartbeatDriverSession,
   parseInventoryDocument,
@@ -213,9 +214,27 @@ describe.sequential("backend foundations", () => {
     const firstPoint = routesData.routeLine[0];
 
     expect(routesData.routeLine.length).toBeGreaterThan(2);
+    expect(routesData.routeLine.length).toBeGreaterThan(
+      routesData.stopRows.length + 1
+    );
     expect(firstPoint?.[0]).toBeCloseTo(-123.3748, 3);
     expect(firstPoint?.[1]).toBeCloseTo(48.4291, 3);
     expect(routesData.routePlans[0]?.stopCount).toBeGreaterThan(0);
+  });
+
+  it("returns driver route directions with the resolved map geometry", async () => {
+    const db = getDb();
+    const offer = await getDriverOfferData();
+    const route = offer.routeOptions[0];
+    const [persistedRoute] = await db.select().from(routes);
+
+    expect(route?.routeDirections.length).toBeGreaterThan(0);
+    expect(route?.routeLine.length).toBeGreaterThan(route?.stops.length ?? 0);
+    expect(route?.routingProvider).toMatch(/fallback|openrouteservice/);
+    expect(persistedRoute?.routeGeometry?.length).toBeGreaterThan(
+      route?.stops.length ?? 0
+    );
+    expect(persistedRoute?.routingWaypointHash).toBeTruthy();
   });
 
   it("persists generated route plans within the time cap", async () => {
