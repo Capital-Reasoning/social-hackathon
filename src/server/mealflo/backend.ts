@@ -202,6 +202,7 @@ export type InboxQueueItem = {
   address: string;
   channel: "form" | "gmail";
   confidence: string;
+  draftType: "other" | "request" | "volunteer";
   id: string;
   sender: string;
   snippet: string;
@@ -2662,7 +2663,9 @@ export async function resetRouteSession(
   };
 }
 
-export async function approveRoute(rawInput: z.input<typeof routeApproveSchema>) {
+export async function approveRoute(
+  rawInput: z.input<typeof routeApproveSchema>
+) {
   const input = routeApproveSchema.parse(rawInput);
   const database = getDb();
   const now = new Date();
@@ -2817,7 +2820,9 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   };
 }
 
-export async function getAdminInboxData(): Promise<AdminInboxData> {
+export async function getAdminInboxData(
+  selectedDraftId?: string | null
+): Promise<AdminInboxData> {
   const graph = await loadDemoGraph();
   const queue = graph.draftRows
     .filter((entry) => entry.status === "pending")
@@ -2835,7 +2840,8 @@ export async function getAdminInboxData(): Promise<AdminInboxData> {
       );
     });
 
-  const selectedDraft = queue[0];
+  const selectedDraft =
+    queue.find((entry) => entry.id === selectedDraftId) ?? queue[0];
   const selectedIntake = graph.intakeRows.find(
     (entry) => entry.id === selectedDraft?.intakeMessageId
   );
@@ -3036,6 +3042,10 @@ export async function getAdminInboxData(): Promise<AdminInboxData> {
       return {
         id: draft.id,
         channel: intake?.channel === "gmail" ? "gmail" : "form",
+        draftType:
+          draft.draftType === "request" || draft.draftType === "volunteer"
+            ? draft.draftType
+            : "other",
         subject: intake?.subject ?? draft.summary,
         sender: intake?.senderName ?? "Unknown sender",
         status: toQueueStatus(draft.confidenceScore, draft.lowConfidenceFields),

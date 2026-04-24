@@ -1,11 +1,12 @@
 import { Badge } from "@/components/mealflo/badge";
+import { AdminDirectoryTable } from "@/components/mealflo/admin-directory-table";
 import { AdminInboxRowActions } from "@/components/mealflo/admin-inbox-row-actions";
+import { AdminInboxReview } from "@/components/mealflo/admin-inbox-review";
 import { AdminInventoryWorkflows } from "@/components/mealflo/admin-inventory-workflows";
 import { AdminRouteActions } from "@/components/mealflo/admin-route-actions";
 import { ButtonLink } from "@/components/mealflo/button";
 import { Card, CardHeader } from "@/components/mealflo/card";
 import {
-  MetricTile,
   PageFrame,
   PageHeader,
   StatusPill,
@@ -25,7 +26,6 @@ import {
   getAdminInboxData,
   getAdminInventoryData,
   getAdminRoutesData,
-  type AdminDirectoryRow,
   type DriverCapacityCard,
   type InboxQueueItem,
   type RoutePlanCard,
@@ -154,102 +154,60 @@ function AdminTopBar({
   );
 }
 
-function TriageBoard({
+function ReadyRequestsTable({
   buckets,
-  limit,
+  limit = 8,
 }: {
   buckets: Record<TriageBucket, TriageRequestCard[]>;
   limit?: number;
 }) {
-  const orderedBuckets: TriageBucket[] = ["today", "tomorrow", "later"];
-  const rows = orderedBuckets.flatMap((bucket) => {
-    const requests = limit ? buckets[bucket].slice(0, limit) : buckets[bucket];
+  const rows = (["today", "tomorrow", "later"] as TriageBucket[])
+    .flatMap((bucket) =>
+      buckets[bucket].map((request) => ({
+        bucket,
+        request,
+      }))
+    )
+    .slice(0, limit);
 
-    return requests.map((request) => ({ bucket, request }));
-  });
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[780px] border-collapse text-left">
-        <thead>
-          <tr className="border-line text-muted border-b-[1.5px] text-xs font-semibold tracking-[0.08em] uppercase">
-            <th className="py-3 pr-4">Window</th>
-            <th className="py-3 pr-4">Name</th>
-            <th className="py-3 pr-4">Address</th>
-            <th className="py-3 pr-4">Urgency</th>
-            <th className="py-3 pr-4">Meals</th>
-            <th className="py-3 pr-4">Household</th>
-            <th className="py-3 pr-0">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ bucket, request }) => {
-            const config = triageBucketConfig[bucket];
-
-            return (
-              <tr
-                key={request.id}
-                className="border-line/70 border-b last:border-b-0"
-              >
-                <td className="py-3 pr-4">
-                  <Badge size="sm" tone={config.tone}>
-                    {config.label}
-                  </Badge>
-                </td>
-                <td className="text-ink py-3 pr-4 font-medium">
-                  {request.clientName}
-                </td>
-                <td className="text-muted max-w-[260px] py-3 pr-4 text-sm leading-5">
-                  {request.address}
-                </td>
-                <td className="text-ink py-3 pr-4 font-medium">
-                  {request.urgency}
-                </td>
-                <td className="text-ink py-3 pr-4">{request.mealCount}</td>
-                <td className="text-ink py-3 pr-4">{request.householdSize}</td>
-                <td className="py-3 pr-0">
-                  <Badge size="sm" tone={requestStatusTone(request.status)}>
-                    {request.statusLabel}
-                  </Badge>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ReadyTodayTable({ requests }: { requests: TriageRequestCard[] }) {
   return (
     <div className="min-w-0 overflow-hidden">
-      <table className="w-full table-fixed border-collapse text-left">
+      <table className="w-full min-w-[700px] border-collapse text-left">
         <thead>
           <tr className="border-line text-muted border-b-[1.5px] text-xs font-semibold tracking-[0.08em] uppercase">
-            <th className="w-[28%] py-3 pr-3">Name</th>
-            <th className="w-[44%] py-3 pr-3">Address</th>
-            <th className="w-[18%] py-3 pr-3">Urgency</th>
-            <th className="w-[10%] py-3 pr-0 text-right">Meals</th>
+            <th className="py-2.5 pr-3">Window</th>
+            <th className="py-2.5 pr-3">Neighbor</th>
+            <th className="py-2.5 pr-3">Details</th>
+            <th className="py-2.5 pr-3 text-right">Meals</th>
+            <th className="py-2.5 pr-0">Status</th>
           </tr>
         </thead>
         <tbody>
-          {requests.map((request) => (
+          {rows.map(({ bucket, request }) => (
             <tr
               key={request.id}
               className="border-line/70 border-b last:border-b-0"
             >
-              <td className="text-ink py-3 pr-3 font-medium">
+              <td className="py-2.5 pr-3">
+                <Badge size="sm" tone={triageBucketConfig[bucket].tone}>
+                  {triageBucketConfig[bucket].label}
+                </Badge>
+              </td>
+              <td className="text-ink py-2.5 pr-3 font-medium">
                 {request.clientName}
               </td>
-              <td className="text-muted py-3 pr-3 text-sm leading-5">
+              <td className="text-muted py-2.5 pr-3 text-sm leading-5">
+                <span className="text-ink font-medium">{request.urgency}</span>
+                <span className="mx-2 text-[rgba(24,24,60,0.24)]">/</span>
                 {request.address}
               </td>
-              <td className="text-ink py-3 pr-3 font-medium">
-                {request.urgency}
-              </td>
-              <td className="text-ink py-3 pr-0 text-right">
+              <td className="text-ink py-2.5 pr-3 text-right font-medium">
                 {request.mealCount}
+              </td>
+              <td className="py-2.5 pr-0">
+                <Badge size="sm" tone={requestStatusTone(request.status)}>
+                  {request.statusLabel}
+                </Badge>
               </td>
             </tr>
           ))}
@@ -284,7 +242,7 @@ function DashboardSectionHeader({
 function dashboardKpiCopy(item: { id: string; label: string; value: string }) {
   switch (item.id) {
     case "new-intake":
-      return { metric: `${item.value} intake`, status: "Waiting for review" };
+      return { metric: `${item.value} items`, status: "Waiting for review" };
     case "ready-today":
       return { metric: `${item.value} requests`, status: "Ready today" };
     case "routes-ready":
@@ -294,6 +252,42 @@ function dashboardKpiCopy(item: { id: string; label: string; value: string }) {
     default:
       return { metric: `${item.value} ${item.label}`, status: item.label };
   }
+}
+
+function SummaryStatusStrip({
+  items,
+}: {
+  items: Array<{
+    icon: IconName;
+    id: string;
+    metric: string;
+    status: string;
+  }>;
+}) {
+  return (
+    <section className="border-line rounded-[16px] border-[1.5px] bg-white px-4 py-3 sm:px-5">
+      <div className="grid divide-y divide-[rgba(24,24,60,0.08)] sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:divide-x">
+        {items.map((item) => {
+          return (
+            <div
+              key={item.id}
+              className="flex min-w-0 items-center gap-3 py-3 first:pt-0 last:pb-0 sm:px-4 sm:py-0 sm:first:pl-0 sm:last:pr-0 xl:first:pl-0"
+            >
+              <MealfloIcon name={item.icon} size={38} />
+              <div className="min-w-0">
+                <p className="font-display text-ink text-[26px] leading-none font-bold tracking-[-0.02em]">
+                  {item.metric}
+                </p>
+                <p className="text-muted mt-1 text-sm font-medium">
+                  {item.status}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function DashboardSummaryCard({
@@ -307,74 +301,93 @@ function DashboardSummaryCard({
   }>;
 }) {
   return (
-    <section className="border-line rounded-[16px] border-[1.5px] bg-white px-4 py-3 sm:px-5">
-      <div className="grid divide-y divide-[rgba(24,24,60,0.08)] sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:divide-x">
-        {items.map((item) => {
-          const copy = dashboardKpiCopy(item);
+    <SummaryStatusStrip
+      items={items.map((item) => {
+        const copy = dashboardKpiCopy(item);
 
-          return (
-            <div
-              key={item.id}
-              className="flex min-w-0 items-center gap-3 py-3 first:pt-0 last:pb-0 sm:px-4 sm:py-0 sm:first:pl-0 sm:last:pr-0 xl:first:pl-0"
-            >
-              <MealfloIcon name={item.icon as IconName} size={38} />
-              <div className="min-w-0">
-                <p className="font-display text-ink text-[26px] leading-none font-bold tracking-[-0.02em]">
-                  {copy.metric}
-                </p>
-                <p className="text-muted mt-1 text-sm font-medium">
-                  {copy.status}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
+        return {
+          icon: item.icon as IconName,
+          id: item.id,
+          metric: copy.metric,
+          status: copy.status,
+        };
+      })}
+    />
   );
 }
 
 function InboxRequestsTable({
   editHrefFor,
+  selectedDraftId,
   items,
 }: {
   editHrefFor: (draftId: string) => string;
+  selectedDraftId?: string | null;
   items: InboxQueueItem[];
 }) {
   return (
-    <Table>
+    <Table className="min-w-[860px]">
       <TableHead>
         <TableRow>
-          <TableHeaderCell>Source</TableHeaderCell>
-          <TableHeaderCell>Raw request</TableHeaderCell>
-          <TableHeaderCell>Parsed suggestion</TableHeaderCell>
-          <TableHeaderCell>Confidence</TableHeaderCell>
-          <TableHeaderCell>Actions</TableHeaderCell>
+          <TableHeaderCell className="w-[16%] py-2.5">Source</TableHeaderCell>
+          <TableHeaderCell className="w-[27%] py-2.5">Request</TableHeaderCell>
+          <TableHeaderCell className="w-[29%] py-2.5">
+            Parsed details
+          </TableHeaderCell>
+          <TableHeaderCell className="w-[10%] py-2.5">
+            Confidence
+          </TableHeaderCell>
+          <TableHeaderCell className="w-[18%] py-2.5">Actions</TableHeaderCell>
         </TableRow>
       </TableHead>
       <TableBody>
         {items.map((item) => (
-          <TableRow key={item.id}>
-            <TableCell>
-              <div className="min-w-[150px] space-y-1">
+          <TableRow
+            key={item.id}
+            className={
+              item.id === selectedDraftId
+                ? "bg-[rgba(240,243,255,0.46)]"
+                : undefined
+            }
+          >
+            <TableCell className="py-2.5 align-top">
+              <div className="space-y-1">
                 <Badge
                   size="sm"
                   tone={item.channel === "gmail" ? "info" : "neutral"}
                 >
-                  {item.channel}
+                  {item.channel === "gmail" ? "Gmail" : "Form"}
                 </Badge>
+                <p className="text-muted text-xs leading-5">
+                  {item.draftType === "volunteer"
+                    ? "Volunteer"
+                    : item.draftType === "request"
+                      ? "Request"
+                      : "Other"}
+                </p>
+              </div>
+            </TableCell>
+            <TableCell className="py-2.5 align-top">
+              <div className="space-y-1">
                 <p className="text-ink font-medium">{item.sender}</p>
                 <p className="text-muted text-xs leading-5">
                   {displayKitchenLabel(item.subject)}
                 </p>
               </div>
             </TableCell>
-            <TableCell className="text-muted max-w-[320px]">
-              {displayKitchenLabel(item.snippet)}
-            </TableCell>
-            <TableCell>
-              <div className="min-w-[220px] space-y-1">
+            <TableCell className="py-2.5 align-top">
+              <div className="space-y-1">
                 <p className="text-ink font-medium">{item.address}</p>
+                <p className="text-muted line-clamp-2 text-xs leading-5">
+                  {displayKitchenLabel(item.snippet)}
+                </p>
+              </div>
+            </TableCell>
+            <TableCell className="py-2.5 align-top">
+              <div className="space-y-1">
+                <p className="font-display text-ink text-lg leading-none font-semibold">
+                  {item.confidence}
+                </p>
                 <Badge
                   size="sm"
                   tone={item.status === "low confidence" ? "warning" : "info"}
@@ -383,10 +396,7 @@ function InboxRequestsTable({
                 </Badge>
               </div>
             </TableCell>
-            <TableCell className="font-display text-lg font-semibold">
-              {item.confidence}
-            </TableCell>
-            <TableCell>
+            <TableCell className="py-2.5 align-top">
               <AdminInboxRowActions
                 draftId={item.id}
                 editHref={editHrefFor(item.id)}
@@ -396,51 +406,6 @@ function InboxRequestsTable({
         ))}
       </TableBody>
     </Table>
-  );
-}
-
-function DirectoryTable({ rows }: { rows: AdminDirectoryRow[] }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        {["All", "Clients", "Drivers", "To do", "Delivered"].map((filter) => (
-          <Badge key={filter} tone={filter === "All" ? "primary" : "neutral"}>
-            {filter}
-          </Badge>
-        ))}
-      </div>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableHeaderCell>Type</TableHeaderCell>
-            <TableHeaderCell>Name</TableHeaderCell>
-            <TableHeaderCell>Location</TableHeaderCell>
-            <TableHeaderCell>Status</TableHeaderCell>
-            <TableHeaderCell>Notes</TableHeaderCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.id}>
-              <TableCell>
-                <Badge
-                  size="sm"
-                  tone={row.role === "driver" ? "info" : "neutral"}
-                >
-                  {row.role}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-ink font-medium">{row.name}</TableCell>
-              <TableCell className="text-muted">{row.location}</TableCell>
-              <TableCell>{row.status}</TableCell>
-              <TableCell className="text-muted">
-                {displayKitchenLabel(row.note)}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
   );
 }
 
@@ -626,6 +591,8 @@ export async function AdminDashboardView() {
         note="New intake, approved stops, live driver movement, and meal pressure stay visible in one pass."
       />
 
+      <DashboardSummaryCard items={data.dashboardKpis} />
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.36fr)_minmax(0,460px)]">
         <section className="space-y-3">
           <DashboardSectionHeader
@@ -640,7 +607,7 @@ export async function AdminDashboardView() {
             }
           />
           <MapCanvas
-            className="h-[440px]"
+            className="h-[500px]"
             initialView="greater-victoria"
             markers={activeDriverMarkers}
           />
@@ -651,71 +618,19 @@ export async function AdminDashboardView() {
             title="Ready today"
             note="Approved requests that can feed the next route pass."
           />
-          <div className="border-line min-w-0 overflow-hidden rounded-[16px] border-[1.5px] bg-white px-5 py-4">
-            <ReadyTodayTable requests={data.requestBuckets.today.slice(0, 6)} />
-          </div>
-        </section>
-      </div>
-
-      <DashboardSummaryCard items={data.dashboardKpis} />
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.12fr)_380px]">
-        <section className="space-y-3">
-          <DashboardSectionHeader
-            title="Approved requests"
-            note="Today, tomorrow, and later stay grouped before routing."
-            action={
+          <div className="border-line min-w-0 overflow-hidden rounded-[16px] border-[1.5px] bg-white px-4 py-3">
+            <ReadyRequestsTable buckets={data.requestBuckets} />
+            <div className="border-line/70 mt-3 flex justify-end border-t pt-3">
               <ButtonLink
-                href="/admin/routes"
+                href="/demo/admin?view=routes"
                 size="sm"
                 variant="secondary"
                 leading={<MealfloIcon name="route-road" size={18} />}
               >
-                Plan routes
+                View all
               </ButtonLink>
-            }
-          />
-          <div className="border-line overflow-hidden rounded-[16px] border-[1.5px] bg-white px-5 py-4">
-            <TriageBoard buckets={data.requestBuckets} limit={2} />
+            </div>
           </div>
-        </section>
-
-        <section className="space-y-3">
-          <DashboardSectionHeader
-            title="Inventory pressure"
-            note="Lowest meal counts and items that need refrigeration affect route choices."
-          />
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeaderCell>Meal</TableHeaderCell>
-                <TableHeaderCell>Category</TableHeaderCell>
-                <TableHeaderCell>Qty</TableHeaderCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.inventoryMeals.map((item) => (
-                <TableRow key={item.name}>
-                  <TableCell className="text-ink font-medium">
-                    {item.name}
-                  </TableCell>
-                  <TableCell className="text-muted">{item.category}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-display text-lg font-semibold">
-                        {item.quantity}
-                      </span>
-                      {item.tags.map((tag) => (
-                        <Badge key={tag} size="sm">
-                          {displayKitchenLabel(tag)}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
         </section>
       </div>
     </div>
@@ -724,45 +639,99 @@ export async function AdminDashboardView() {
 
 export async function AdminInboxView({
   demoMode = false,
+  draftId,
 }: {
   demoMode?: boolean;
+  draftId?: string | null;
 }) {
-  const data = await getAdminInboxData();
+  const data = await getAdminInboxData(draftId);
   const editHrefFor = (draftId: string) =>
     demoMode
       ? `/demo/admin?view=inbox&draft=${draftId}`
       : `/admin/inbox?draft=${draftId}`;
+  const selectedDraftId = data.selectedItem.draftId;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Inbox"
-        note="New food requests and volunteer offers stay in one review table. The directory beside it keeps clients and drivers searchable on one surface."
+        note="Review parsed requests, approve the clean ones, and keep the people directory close."
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(520px,0.85fr)]">
-        <Card className="space-y-3">
-          <CardHeader
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,430px)]">
+        <section className="min-w-0 space-y-3">
+          <DashboardSectionHeader
             title="New requests"
-            note="Raw message, parsed suggestion, and review actions stay together."
+            note="Source, summary, parsed destination, confidence, and actions stay visible."
             action={
               <Badge tone="warning">{data.inboxItems.length} waiting</Badge>
             }
           />
           <InboxRequestsTable
             editHrefFor={editHrefFor}
+            selectedDraftId={selectedDraftId}
             items={data.inboxItems}
           />
-        </Card>
+        </section>
 
-        <Card className="space-y-4">
-          <CardHeader
-            title="Clients and drivers"
-            note="Clients, drivers, todo status, and delivered status stay in one compact table."
+        <section className="min-w-0 space-y-3">
+          <DashboardSectionHeader
+            title="Review details"
+            note="Use edit from the queue to choose a draft."
           />
-          <DirectoryTable rows={data.directoryRows} />
-        </Card>
+          <div className="border-line min-w-0 overflow-hidden rounded-[16px] border-[1.5px] bg-white p-4">
+            {selectedDraftId ? (
+              <div className="mb-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-ink font-medium">
+                      {data.selectedItem.sender}
+                    </p>
+                    <p className="text-muted text-sm leading-5">
+                      {data.selectedItem.subject}
+                    </p>
+                  </div>
+                  <Badge
+                    size="sm"
+                    tone={
+                      data.selectedItem.parserConfidence.startsWith("9") ||
+                      data.selectedItem.parserConfidence === "100%"
+                        ? "success"
+                        : "warning"
+                    }
+                  >
+                    {data.selectedItem.parserConfidence}
+                  </Badge>
+                </div>
+                <div className="border-line bg-surface-tint rounded-[12px] border-[1.5px] p-3">
+                  <p className="text-muted text-xs font-semibold tracking-[0.08em] uppercase">
+                    Source text
+                  </p>
+                  <p className="text-ink mt-1 text-sm leading-6">
+                    {displayKitchenLabel(
+                      data.selectedItem.rawParagraphs[0] ??
+                        data.selectedItem.summary
+                    )}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            <AdminInboxReview
+              key={data.selectedItem.draftId ?? "empty"}
+              inboxFields={data.inboxFields}
+              selectedItem={data.selectedItem}
+            />
+          </div>
+        </section>
       </div>
+
+      <section className="space-y-3">
+        <DashboardSectionHeader
+          title="Clients and drivers"
+          note="Filter the active directory without leaving the inbox."
+        />
+        <AdminDirectoryTable rows={data.directoryRows} />
+      </section>
     </div>
   );
 }
@@ -955,30 +924,51 @@ export async function AdminRoutesView() {
 
 export async function AdminInventoryView() {
   const data = await getAdminInventoryData();
+  const inventorySummaryItems = data.inventoryKpis.map((item) => {
+    if (item.id === "route-ready-meals") {
+      return {
+        icon: "meal-container" as const,
+        id: item.id,
+        metric: `${item.value} meals`,
+        status: "Route-ready",
+      };
+    }
+
+    if (item.id === "refrigerated-meals") {
+      return {
+        icon: "snowflake" as const,
+        id: item.id,
+        metric: `${item.value} chilled`,
+        status: "Need cooler capacity",
+      };
+    }
+
+    if (item.id === "shortage-holds") {
+      return {
+        icon: "warning-alert" as const,
+        id: item.id,
+        metric: `${item.value} holds`,
+        status: "Shortage review",
+      };
+    }
+
+    return {
+      icon: "fridge" as const,
+      id: item.id,
+      metric: `${item.value} perishables`,
+      status: "Use first",
+    };
+  });
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Food readiness"
-        note="Deliverable meals are route-ready inventory. Ingredients stay separate, sorted by perishability, and confirmed before they change stock."
-      />
+      <PageHeader title="Inventory" />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {data.inventoryKpis.map((item) => (
-          <MetricTile
-            key={item.id}
-            icon={item.icon as IconName}
-            label={item.label}
-            note={item.note}
-            tone={item.tone}
-            value={item.value}
-          />
-        ))}
-      </div>
+      <SummaryStatusStrip items={inventorySummaryItems} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.95fr)]">
-        <Card className="space-y-4">
-          <CardHeader
+        <section className="space-y-3">
+          <DashboardSectionHeader
             title="Deliverable meals"
             note="Named meal items are the only food layer used by route allocation and drivers."
           />
@@ -1038,10 +1028,10 @@ export async function AdminInventoryView() {
               ))}
             </TableBody>
           </Table>
-        </Card>
+        </section>
 
-        <Card className="space-y-4">
-          <CardHeader
+        <section className="space-y-3">
+          <DashboardSectionHeader
             title="Ingredients"
             note="Ingredient stock stays out of driver loadouts and sorts by confirmed perishability."
           />
@@ -1093,7 +1083,7 @@ export async function AdminInventoryView() {
               ))}
             </TableBody>
           </Table>
-        </Card>
+        </section>
       </div>
 
       <AdminInventoryWorkflows

@@ -1,12 +1,14 @@
 "use client";
 
-import { Suspense, type ComponentProps } from "react";
+import { Suspense, type ComponentProps, type FormEvent } from "react";
 import { useState } from "react";
 
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
+import { Button } from "@/components/mealflo/button";
+import { Field, Input, Select, Textarea } from "@/components/mealflo/field";
 import { MealfloIcon, type IconName } from "@/components/mealflo/icon";
 import { PersonaLabel } from "@/components/mealflo/persona-label";
 import {
@@ -88,6 +90,28 @@ type DemoControl = (typeof controlButtons)[number];
 type DemoControlResponse = {
   error?: string;
   ok?: boolean;
+};
+
+type RequestFormState = {
+  address: string;
+  contactPhone: string;
+  dueBucket: "later" | "today" | "tomorrow";
+  householdSize: string;
+  mealCount: string;
+  municipality: string;
+  name: string;
+  notes: string;
+};
+
+const defaultRequestForm: RequestFormState = {
+  address: demoInboundPayloads.request.addressLine1,
+  contactPhone: demoInboundPayloads.request.contactPhone,
+  dueBucket: demoInboundPayloads.request.dueBucket,
+  householdSize: String(demoInboundPayloads.request.householdSize),
+  mealCount: String(demoInboundPayloads.request.requestedMealCount),
+  municipality: demoInboundPayloads.request.municipality,
+  name: `${demoInboundPayloads.request.firstName} ${demoInboundPayloads.request.lastName}`,
+  notes: demoInboundPayloads.request.message,
 };
 
 const driverControlHints: Record<string, string> = {
@@ -200,6 +224,9 @@ export function DemoShell({
   const [message, setMessage] = useState("Shell ready.");
   const [activeControlId, setActiveControlId] = useState<string | null>(null);
   const [pendingControlId, setPendingControlId] = useState<string | null>(null);
+  const [requestForm, setRequestForm] =
+    useState<RequestFormState>(defaultRequestForm);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
   const visibleControls = controlButtons.filter((control) =>
     control.roles.includes(activeRole)
   );
@@ -230,10 +257,8 @@ export function DemoShell({
 
     try {
       if (control.action === "request") {
-        await postDemoControl("/api/intake/request", demoInboundPayloads.request);
-        setMessage(control.message);
-        router.push("/demo/admin?view=inbox");
-        router.refresh();
+        setRequestModalOpen(true);
+        setMessage("Add request form open.");
         return;
       }
 
@@ -260,6 +285,38 @@ export function DemoShell({
       setMessage(control.message);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Control failed.");
+    } finally {
+      setPendingControlId(null);
+    }
+  };
+
+  const submitRequestForm = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setActiveControlId("new-request");
+    setPendingControlId("new-request");
+    setMessage("Saving request.");
+
+    const [firstName, ...restName] = requestForm.name.trim().split(/\s+/);
+
+    try {
+      await postDemoControl("/api/intake/request", {
+        ...demoInboundPayloads.request,
+        addressLine1: requestForm.address,
+        contactPhone: requestForm.contactPhone,
+        dueBucket: requestForm.dueBucket,
+        firstName: firstName || "New",
+        householdSize: Number.parseInt(requestForm.householdSize, 10) || 1,
+        lastName: restName.join(" ") || "Neighbor",
+        message: requestForm.notes,
+        municipality: requestForm.municipality,
+        requestedMealCount: Number.parseInt(requestForm.mealCount, 10) || 1,
+      });
+      setMessage("Request added to inbox.");
+      setRequestModalOpen(false);
+      router.push("/demo/admin?view=inbox");
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Request failed.");
     } finally {
       setPendingControlId(null);
     }
@@ -312,6 +369,182 @@ export function DemoShell({
 
   return (
     <div className="h-screen overflow-hidden bg-[#121724] text-white">
+      {requestModalOpen ? (
+        <div className="text-ink fixed inset-0 z-50 grid place-items-center bg-black/48 px-4 py-6">
+          <form
+            onSubmit={submitRequestForm}
+            className="border-line bg-bg max-h-[min(760px,92vh)] w-full max-w-[680px] overflow-y-auto rounded-[22px] border-[1.5px] p-5 shadow-[var(--mf-shadow-elevated)] sm:p-6"
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <h2 className="font-display text-ink text-[32px] font-semibold tracking-[-0.03em]">
+                  Add request
+                </h2>
+                <p className="text-muted text-sm leading-6">
+                  Create a demo intake item and send it to inbox review.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close add request"
+                className="border-line hover:border-line-strong grid size-11 shrink-0 place-items-center rounded-full border-[1.5px] bg-white transition-[transform,background-color,border-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5"
+                onClick={() => {
+                  setRequestModalOpen(false);
+                  setMessage("Request form closed.");
+                }}
+              >
+                <MealfloIcon name="close-x" size={20} />
+              </button>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Name" htmlFor="demo-request-name" required>
+                <Input
+                  id="demo-request-name"
+                  value={requestForm.name}
+                  onChange={(event) =>
+                    setRequestForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <Field label="Phone" htmlFor="demo-request-phone" required>
+                <Input
+                  id="demo-request-phone"
+                  value={requestForm.contactPhone}
+                  onChange={(event) =>
+                    setRequestForm((current) => ({
+                      ...current,
+                      contactPhone: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <Field label="Address" htmlFor="demo-request-address" required>
+                <Input
+                  id="demo-request-address"
+                  value={requestForm.address}
+                  onChange={(event) =>
+                    setRequestForm((current) => ({
+                      ...current,
+                      address: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <Field label="Municipality" htmlFor="demo-request-municipality">
+                <Input
+                  id="demo-request-municipality"
+                  value={requestForm.municipality}
+                  onChange={(event) =>
+                    setRequestForm((current) => ({
+                      ...current,
+                      municipality: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <Field label="Need by" htmlFor="demo-request-due">
+                <Select
+                  id="demo-request-due"
+                  value={requestForm.dueBucket}
+                  onChange={(event) =>
+                    setRequestForm((current) => ({
+                      ...current,
+                      dueBucket: event.target
+                        .value as RequestFormState["dueBucket"],
+                    }))
+                  }
+                >
+                  <option value="today">today</option>
+                  <option value="tomorrow">tomorrow</option>
+                  <option value="later">later</option>
+                </Select>
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Meals" htmlFor="demo-request-meals">
+                  <Input
+                    id="demo-request-meals"
+                    inputMode="numeric"
+                    type="number"
+                    min={1}
+                    value={requestForm.mealCount}
+                    onChange={(event) =>
+                      setRequestForm((current) => ({
+                        ...current,
+                        mealCount: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+                <Field label="Household" htmlFor="demo-request-household">
+                  <Input
+                    id="demo-request-household"
+                    inputMode="numeric"
+                    type="number"
+                    min={1}
+                    value={requestForm.householdSize}
+                    onChange={(event) =>
+                      setRequestForm((current) => ({
+                        ...current,
+                        householdSize: event.target.value,
+                      }))
+                    }
+                  />
+                </Field>
+              </div>
+              <Field
+                className="sm:col-span-2"
+                label="Notes"
+                htmlFor="demo-request-notes"
+              >
+                <Textarea
+                  id="demo-request-notes"
+                  value={requestForm.notes}
+                  onChange={(event) =>
+                    setRequestForm((current) => ({
+                      ...current,
+                      notes: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-muted min-h-[24px] text-sm leading-6">
+                {pendingControlId === "new-request"
+                  ? "Sending to inbox."
+                  : "This updates the demo queue only."}
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setRequestForm(defaultRequestForm);
+                    setMessage("Sample request restored.");
+                  }}
+                >
+                  Reset sample
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={pendingControlId === "new-request"}
+                  leading={<MealfloIcon name="plus" size={20} />}
+                >
+                  {pendingControlId === "new-request"
+                    ? "Adding"
+                    : "Add to inbox"}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </div>
+      ) : null}
       <div className="mx-auto flex h-screen w-full max-w-[1900px] flex-col gap-2 px-2 py-2">
         <header className="px-1 py-1">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -375,7 +608,7 @@ export function DemoShell({
                   {driverControls}
                 </aside>
                 <div className="flex min-h-0 items-center justify-center lg:justify-center">
-                  <div className="relative h-full w-full max-w-[430px] lg:aspect-[2752/4195] lg:w-auto lg:max-w-[min(45vw,590px)] lg:max-h-[calc(100vh-104px)]">
+                  <div className="relative h-full w-full max-w-[430px] lg:aspect-[2752/4195] lg:max-h-[calc(100vh-104px)] lg:w-auto lg:max-w-[min(45vw,590px)]">
                     <Image
                       src="/iphone-frame-modern.png"
                       alt=""

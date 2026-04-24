@@ -123,7 +123,7 @@ export function PageFrame({
 type PageHeaderProps = {
   actions?: ReactNode;
   className?: string;
-  note: string;
+  note?: string;
   title: ReactNode;
 };
 
@@ -145,7 +145,9 @@ export function PageHeader({
           <h1 className="font-display text-ink text-[clamp(2.4rem,4vw,4.6rem)] font-bold tracking-[-0.03em]">
             {title}
           </h1>
-          <p className="text-muted max-w-3xl text-base leading-7">{note}</p>
+          {note ? (
+            <p className="text-muted max-w-3xl text-base leading-7">{note}</p>
+          ) : null}
         </div>
       </div>
       {actions ? <div className="shrink-0">{actions}</div> : null}
