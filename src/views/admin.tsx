@@ -5,6 +5,7 @@ import { AdminInboxWorkbench } from "@/components/mealflo/admin-inbox-workbench"
 import { AdminInventoryWorkflows } from "@/components/mealflo/admin-inventory-workflows";
 import { AdminLiveMap } from "@/components/mealflo/admin-live-map";
 import { TodayRouteList } from "@/components/mealflo/admin-today-routes";
+import { AdminUnroutedRouteGenerator } from "@/components/mealflo/admin-unrouted-route-generator";
 import { ButtonLink } from "@/components/mealflo/button";
 import { Card } from "@/components/mealflo/card";
 import { PageFrame, PageHeader, TopBar } from "@/components/mealflo/layout";
@@ -328,6 +329,10 @@ const todayRouteDisplayOrder = new Map(
   ].map((id, index) => [id, index] as const)
 );
 
+function isPublicGeneratedRoute(routeId: string) {
+  return routeId.startsWith("route-public-");
+}
+
 function RoutedPeopleTable({ requests }: { requests: TriageRequestCard[] }) {
   return (
     <>
@@ -587,6 +592,8 @@ export async function AdminRoutesView() {
     .filter((route) => todayRouteNames.has(route.name))
     .sort(
       (left, right) =>
+        Number(!isPublicGeneratedRoute(left.id)) -
+          Number(!isPublicGeneratedRoute(right.id)) ||
         (todayRouteDisplayOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
           (todayRouteDisplayOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER) ||
         left.name.localeCompare(right.name)
@@ -620,6 +627,8 @@ export async function AdminRoutesView() {
   return (
     <div className="space-y-6">
       <PageHeader title="Routes" />
+
+      <AdminUnroutedRouteGenerator initialUnrouted={data.unroutedPublicToday} />
 
       <div className="grid gap-4 xl:grid-cols-[270px_minmax(0,1fr)]">
         <section className="space-y-3">

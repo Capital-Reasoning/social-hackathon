@@ -11,6 +11,12 @@ import {
   type PlannerVehicle,
   type PlannerVolunteer,
 } from "@/server/mealflo/routing";
+import {
+  PUBLIC_ROUTE_MAX_TOTAL_MINUTES,
+  generateUnroutedPublicTodayRoutePlans,
+  selectUnroutedPublicTodayRequests,
+  type PublicScopedPlannerRequest,
+} from "@/server/mealflo/public-routing";
 
 const depot: PlannerDepot = {
   id: "depot-test",
@@ -104,6 +110,18 @@ function request(overrides: Partial<PlannerRequest>): PlannerRequest {
     status: "approved",
     urgencyScore: 80,
     usesWheelchair: false,
+    ...overrides,
+  };
+}
+
+function publicRequest(
+  overrides: Partial<PublicScopedPlannerRequest>
+): PublicScopedPlannerRequest {
+  return {
+    ...request(overrides),
+    assignedRouteId: null,
+    scheduledDate: "2026-04-23",
+    sourceChannel: "public_form",
     ...overrides,
   };
 }
@@ -242,5 +260,67 @@ describe("routing planner", () => {
     expect(result.excludedRequests.map((entry) => entry.requestId)).toEqual(
       expect.arrayContaining(["request-cold", "request-allergy"])
     );
+  });
+
+  it("scopes public today route generation away from seeded and assigned requests", () => {
+    const scoped = selectUnroutedPublicTodayRequests(
+      [
+        publicRequest({ id: "request-public-today" }),
+        publicRequest({
+          id: "request-seeded",
+          sourceChannel: "manual_entry",
+        }),
+        publicRequest({
+          assignedRouteId: "route-existing",
+          id: "request-already-routed",
+        }),
+        publicRequest({
+          id: "request-public-tomorrow",
+          scheduledDate: "2026-04-24",
+        }),
+      ],
+      {
+        later: "2026-04-26",
+        today: "2026-04-23",
+        tomorrow: "2026-04-24",
+      }
+    );
+
+    expect(scoped.map((entry) => entry.id)).toEqual(["request-public-today"]);
+  });
+
+  it("splits large public-form batches so no generated route exceeds 3 hours", () => {
+    const manyRequests = Array.from({ length: 96 }, (_, index) =>
+      publicRequest({
+        addressLine: `${800 + index} Cook St, Victoria`,
+        clientId: `client-public-${index}`,
+        clientName: `Public Neighbour ${index}`,
+        id: `request-public-${index}`,
+        latitude: 48.414 + (index % 16) * 0.0014,
+        longitude: -123.36 + Math.floor(index / 16) * 0.0015,
+        requestedItems: [{ mealId: "meal-soup", quantity: 1 }],
+      })
+    );
+    const result = generateUnroutedPublicTodayRoutePlans({
+      availability: [availability],
+      baseDates: {
+        later: "2026-04-26",
+        today: "2026-04-23",
+        tomorrow: "2026-04-24",
+      },
+      batchId: "pure-test",
+      depots: [depot],
+      meals: [{ ...meals[1]!, quantityAvailable: 140 }],
+      requests: manyRequests,
+      vehicles: [refrigeratedVehicle],
+      volunteers: [volunteer],
+    });
+
+    expect(result.plans.length).toBeGreaterThan(1);
+    expect(
+      result.plans.every(
+        (plan) => plan.plannedTotalMinutes <= PUBLIC_ROUTE_MAX_TOTAL_MINUTES
+      )
+    ).toBe(true);
   });
 });

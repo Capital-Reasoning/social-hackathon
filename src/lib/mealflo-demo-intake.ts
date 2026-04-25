@@ -258,18 +258,24 @@ export const volunteerDemoProfiles = buildPeople(200).map((person, index) => ({
 export const requestDemoNotes = buildRequestNotes(100);
 export const volunteerDemoNotes = buildVolunteerNotes(100);
 
+let requestDemoCursor = Math.floor(Math.random() * requestDemoProfiles.length);
+
 export function randomRequestDemoFill(): RequestDemoFill {
-  const profile = pick(requestDemoProfiles);
-  const note = pick(requestDemoNotes);
-  const urgency = pick(["today", "tomorrow", "later"] as const);
-  const householdSize = 1 + pickIndex([0, 1, 2, 3]);
+  const index = requestDemoCursor % requestDemoProfiles.length;
+  const profile = requestDemoProfiles[index] ?? requestDemoProfiles[0]!;
+  const note =
+    requestDemoNotes[index % requestDemoNotes.length] ?? requestDemoNotes[0]!;
+  const urgency = "today" as const;
+  const householdSize = 1 + (index % 4);
+
+  requestDemoCursor += 1;
 
   return {
     address: profile.address,
     contactMethod: profile.contactMethod,
     message: note,
     name: `${profile.firstName} ${profile.lastName}`,
-    requestedMealCount: String(Math.max(2, householdSize + pickIndex([0, 1]))),
+    requestedMealCount: String(Math.max(2, householdSize + (index % 2))),
     urgency,
   };
 }

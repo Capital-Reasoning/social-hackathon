@@ -17,6 +17,7 @@ import {
 } from "@/lib/inventory";
 import { buildSeedDataset, seedMetadata } from "@/server/mealflo/seed-data";
 import { db, getDb } from "@/server/db/client";
+import { geocodeDemoVictoriaAddress } from "@/server/mealflo/demo-geocoding";
 import {
   clients,
   deliverableMeals,
@@ -42,10 +43,17 @@ import {
   type ParsedIntakeDraft,
 } from "@/server/mealflo/intake-parser";
 import {
+  calculateRouteDriveMinutes,
   generateRoutePlans,
   type GeneratedRoutePlan,
   type PlannerRequest,
 } from "@/server/mealflo/routing";
+import {
+  PUBLIC_ROUTE_MAX_TOTAL_MINUTES,
+  generateUnroutedPublicTodayRoutePlans,
+  selectUnroutedPublicTodayRequests,
+  type PublicScopedPlannerRequest,
+} from "@/server/mealflo/public-routing";
 import {
   resolveStreetRoute,
   type ResolvedRoute,
@@ -234,8 +242,88 @@ export type RouteGenerationSummary = {
     requestId: string;
   }>;
   routeCount: number;
+  routeIds?: string[];
   routeNames: string[];
   stopCount: number;
+  unroutedPublicToday?: UnroutedPublicTodaySummary;
+};
+
+export type UnroutedPublicTodayStop = {
+  address: string;
+  approvedAtLabel: string;
+  clientName: string;
+  id: string;
+  mealCount: number;
+  urgency: string;
+};
+
+export type UnroutedPublicTodaySummary = {
+  count: number;
+  mealCount: number;
+  stops: UnroutedPublicTodayStop[];
+};
+
+export type PublicRoutePreviewStop = {
+  accessSummary: string;
+  address: string;
+  etaLabel: string;
+  id: string;
+  latitude: number;
+  longitude: number;
+  mealSummary: string;
+  name: string;
+};
+
+export type PublicRouteDriverOption = {
+  id: string;
+  label: string;
+  note: string;
+};
+
+export type PublicRoutePreviewPlan = {
+  area: string;
+  depot: {
+    latitude: number;
+    longitude: number;
+    name: string;
+  } | null;
+  driveTime: string;
+  driver: {
+    id: string;
+    name: string;
+  };
+  id: string;
+  index: number;
+  name: string;
+  plannedDriveMinutes: number;
+  plannedStopMinutes: number;
+  plannedTotalMinutes: number;
+  routeFallbackReason: string | null;
+  routeLine: ReadonlyArray<readonly [number, number]>;
+  routingProvider: ResolvedRoute["provider"];
+  stopCount: number;
+  stops: PublicRoutePreviewStop[];
+  totalPlannedTime: string;
+  vehicle: {
+    id: string;
+    name: string;
+  };
+  warnings: string[];
+};
+
+export type PublicRoutePreview = {
+  batchId: string;
+  driverOptions: PublicRouteDriverOption[];
+  excludedRequests: Array<{
+    clientName: string;
+    reason: string;
+    requestId: string;
+  }>;
+  maxRouteMinutes: number;
+  plans: PublicRoutePreviewPlan[];
+  splitCount: number;
+  stopCount: number;
+  unrouted: UnroutedPublicTodaySummary;
 };
 
 export type InboxQueueItem = {
@@ -313,6 +401,7 @@ export type AdminRoutesData = {
   routeOptions: DriverRouteOption[];
   routePlans: RoutePlanCard[];
   routeSummaries: RouteSummaryCard[];
+  unroutedPublicToday: UnroutedPublicTodaySummary;
   selectedRoute: {
     eta: string;
     id: string;
@@ -540,6 +629,18 @@ export const routeResetSchema = z.object({
 
 export const routeApproveSchema = z.object({
   routeId: z.string().min(3),
+});
+
+export const publicRouteCommitSchema = z.object({
+  assignments: z
+    .array(
+      z.object({
+        routeIndex: z.number().int().min(0),
+        volunteerId: z.string().min(3),
+      })
+    )
+    .default([]),
+  batchId: z.string().min(3).optional(),
 });
 
 export type RoutePrerequisiteInput = {
@@ -1031,7 +1132,9 @@ function toRouteStatus(
   return route.warnings.length > 0 ? "attention" : "ready";
 }
 
-function isTerminalRouteStopStatus(status: typeof routeStops.$inferSelect.status) {
+function isTerminalRouteStopStatus(
+  status: typeof routeStops.$inferSelect.status
+) {
   return (
     status === "delivered" ||
     status === "could_not_deliver" ||
@@ -1049,6 +1152,21 @@ const requestStatusLabels: Record<TriageRequestCard["status"], string> = {
 
 function bucketSortValue(bucket: TriageBucket) {
   return bucket === "today" ? 0 : bucket === "tomorrow" ? 1 : 2;
+}
+
+function isGeneratedPublicRouteId(routeId: string) {
+  return routeId.startsWith("route-public-");
+}
+
+function publicRouteSortWeight(route: typeof routes.$inferSelect) {
+  if (
+    isGeneratedPublicRouteId(route.id) &&
+    route.serviceDate === seedMetadata.baseDates.today
+  ) {
+    return 0;
+  }
+
+  return 1;
 }
 
 async function loadDemoGraph() {
@@ -1372,6 +1490,20 @@ function buildRouteSummaries(graph: Awaited<ReturnType<typeof loadDemoGraph>>) {
   return graph.routeRows
     .slice()
     .sort((left, right) => {
+      const publicRouteWeight =
+        publicRouteSortWeight(left) - publicRouteSortWeight(right);
+
+      if (publicRouteWeight !== 0) {
+        return publicRouteWeight;
+      }
+
+      if (publicRouteSortWeight(left) === 0) {
+        return (
+          right.createdAt.getTime() - left.createdAt.getTime() ||
+          left.routeName.localeCompare(right.routeName)
+        );
+      }
+
       if (left.status === right.status) {
         return left.routeName.localeCompare(right.routeName);
       }
@@ -1554,6 +1686,20 @@ async function buildDriverRouteOptions(
   );
 
   const orderedRoutes = graph.routeRows.slice().sort((left, right) => {
+    const publicRouteWeight =
+      publicRouteSortWeight(left) - publicRouteSortWeight(right);
+
+    if (publicRouteWeight !== 0) {
+      return publicRouteWeight;
+    }
+
+    if (publicRouteSortWeight(left) === 0) {
+      return (
+        right.createdAt.getTime() - left.createdAt.getTime() ||
+        left.routeName.localeCompare(right.routeName)
+      );
+    }
+
     const statusWeight = (route: typeof routes.$inferSelect) =>
       route.status === "in_progress"
         ? 0
@@ -2042,6 +2188,10 @@ async function performSeedDemoData() {
 
 export async function seedDemoData() {
   return serializeDemoSeedMutation(performSeedDemoData);
+}
+
+export async function resetAndSeedDemoData() {
+  return seedDemoData();
 }
 
 export async function createRequestIntake(
@@ -2627,6 +2777,10 @@ export async function approveDraft(draftId: string) {
       payload,
       structuredTextField(draft.structuredPayload, "accessNotes")
     );
+    const coordinates = geocodeDemoVictoriaAddress({
+      addressLine1: payload.addressLine1,
+      municipality: payload.municipality,
+    });
     const slug = slugify(`${payload.firstName}-${payload.lastName}`);
     const clientId = `client-${slug}`;
     const requestId = `request-${slug}-${now.getTime()}`;
@@ -2640,6 +2794,8 @@ export async function approveDraft(draftId: string) {
       neighborhood: payload.neighborhood,
       addressLine1: payload.addressLine1,
       addressLine2: payload.addressLine2,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
       householdSize: payload.householdSize,
       dietaryTags: payload.dietaryTags,
       allergenFlags: payload.allergenFlags,
@@ -2934,7 +3090,298 @@ function buildPlannerRequests(
   });
 }
 
-function routePlanToInsert(plan: GeneratedRoutePlan, now: Date) {
+function sourceChannelForRequest(
+  request: typeof deliveryRequests.$inferSelect,
+  graph: Awaited<ReturnType<typeof loadDemoGraph>>
+) {
+  const draft = request.sourceIntakeDraftId
+    ? graph.draftRows.find((entry) => entry.id === request.sourceIntakeDraftId)
+    : null;
+  const intake = draft
+    ? graph.intakeRows.find((entry) => entry.id === draft.intakeMessageId)
+    : null;
+
+  return intake?.channel ?? "manual_entry";
+}
+
+function buildPublicScopedPlannerRequests(
+  graph: Awaited<ReturnType<typeof loadDemoGraph>>
+) {
+  const plannerRequestsById = new Map(
+    buildPlannerRequests(graph).map((entry) => [entry.id, entry] as const)
+  );
+  const scopedRequests: PublicScopedPlannerRequest[] = [];
+
+  for (const request of graph.requestRows) {
+    const plannerRequest = plannerRequestsById.get(request.id);
+
+    if (!plannerRequest) {
+      continue;
+    }
+
+    scopedRequests.push({
+      ...plannerRequest,
+      assignedRouteId: request.assignedRouteId,
+      scheduledDate: request.scheduledDate,
+      sourceChannel: sourceChannelForRequest(request, graph),
+    });
+  }
+
+  return scopedRequests;
+}
+
+function getUnroutedPublicTodayRequests(
+  graph: Awaited<ReturnType<typeof loadDemoGraph>>
+) {
+  return selectUnroutedPublicTodayRequests(
+    buildPublicScopedPlannerRequests(graph),
+    seedMetadata.baseDates
+  );
+}
+
+function buildUnroutedPublicTodaySummary(
+  graph: Awaited<ReturnType<typeof loadDemoGraph>>
+): UnroutedPublicTodaySummary {
+  const scopedRequests = getUnroutedPublicTodayRequests(graph);
+
+  return {
+    count: scopedRequests.length,
+    mealCount: scopedRequests.reduce(
+      (sum, request) => sum + request.approvedMealCount,
+      0
+    ),
+    stops: scopedRequests.slice(0, 6).map((request) => ({
+      address: request.addressLine,
+      approvedAtLabel: formatTime(request.approvedAt),
+      clientName: request.clientName,
+      id: request.id,
+      mealCount: request.approvedMealCount,
+      urgency: `${request.urgencyScore}/100`,
+    })),
+  };
+}
+
+function publicBatchId() {
+  return `${Date.now()}-${randomUUID().slice(0, 6)}`;
+}
+
+function publicPlannerInput(
+  graph: Awaited<ReturnType<typeof loadDemoGraph>>,
+  batchId: string,
+  idPrefix: string
+) {
+  return generateUnroutedPublicTodayRoutePlans({
+    availability: graph.availabilityRows.map((entry) => ({
+      date: entry.date,
+      id: entry.id,
+      minutesAvailable: entry.minutesAvailable,
+      volunteerId: entry.volunteerId,
+      windowEnd: entry.windowEnd,
+      windowStart: entry.windowStart,
+    })),
+    baseDates: seedMetadata.baseDates,
+    batchId,
+    depots: graph.depotRows.map((entry) => ({
+      id: entry.id,
+      latitude: entry.latitude,
+      longitude: entry.longitude,
+      name: entry.name,
+    })),
+    idPrefix,
+    meals: graph.mealRows.map((entry) => ({
+      allergenFlags: entry.allergenFlags,
+      dietaryTags: entry.dietaryTags,
+      id: entry.id,
+      name: entry.name,
+      quantityAvailable: entry.quantityAvailable,
+      refrigerated: entry.refrigerated,
+      unitLabel: entry.unitLabel,
+    })),
+    requests: buildPublicScopedPlannerRequests(graph),
+    vehicles: graph.vehicleRows
+      .filter((entry) => entry.active)
+      .map((entry) => ({
+        capacityMeals: entry.capacityMeals,
+        homeDepotId: entry.homeDepotId,
+        id: entry.id,
+        name: entry.name,
+        refrigerated: entry.refrigerated,
+        wheelchairLift: entry.wheelchairLift,
+      })),
+    volunteers: graph.volunteerRows.map((entry) => ({
+      active: entry.active,
+      canHandleColdChain: entry.canHandleColdChain,
+      canHandleWheelchair: entry.canHandleWheelchair,
+      firstName: entry.firstName,
+      hasVehicleAccess: entry.hasVehicleAccess,
+      id: entry.id,
+      lastName: entry.lastName,
+      preferredVehicleId: entry.preferredVehicleId,
+    })),
+  });
+}
+
+function publicRouteDriverOptions(
+  graph: Awaited<ReturnType<typeof loadDemoGraph>>
+) {
+  const vehicleById = new Map(
+    graph.vehicleRows.map((entry) => [entry.id, entry] as const)
+  );
+
+  return graph.volunteerRows
+    .filter((entry) => entry.active && entry.hasVehicleAccess)
+    .map((volunteer) => {
+      const vehicle = volunteer.preferredVehicleId
+        ? vehicleById.get(volunteer.preferredVehicleId)
+        : null;
+
+      return {
+        id: volunteer.id,
+        label: compactName(volunteer.firstName, volunteer.lastName),
+        note: `${volunteer.homeArea} · ${vehicle?.name ?? "Personal vehicle"}`,
+      } satisfies PublicRouteDriverOption;
+    });
+}
+
+function routePlanWaypoints(
+  plan: GeneratedRoutePlan,
+  graph: Awaited<ReturnType<typeof loadDemoGraph>>
+) {
+  const depot = graph.depotRows.find((entry) => entry.id === plan.startDepotId);
+
+  return [
+    depot ? ([depot.longitude, depot.latitude] as const) : null,
+    ...plan.stops.map((stop) => [stop.longitude, stop.latitude] as const),
+  ].filter((entry): entry is RouteCoordinate => Boolean(entry));
+}
+
+async function publicPreviewPlan(
+  plan: GeneratedRoutePlan,
+  graph: Awaited<ReturnType<typeof loadDemoGraph>>,
+  index: number
+): Promise<PublicRoutePreviewPlan> {
+  const volunteer = graph.volunteerRows.find(
+    (entry) => entry.id === plan.volunteerId
+  );
+  const vehicle = graph.vehicleRows.find(
+    (entry) => entry.id === plan.vehicleId
+  );
+  const depot = graph.depotRows.find((entry) => entry.id === plan.startDepotId);
+  const resolvedRoute = await resolveStreetRoute(
+    routePlanWaypoints(plan, graph)
+  );
+
+  return {
+    area: plan.areaLabel,
+    depot: depot
+      ? {
+          latitude: depot.latitude,
+          longitude: depot.longitude,
+          name: depot.name,
+        }
+      : null,
+    driveTime: formatRelativeMinutes(plan.plannedDriveMinutes),
+    driver: {
+      id: plan.volunteerId,
+      name: volunteer
+        ? compactName(volunteer.firstName, volunteer.lastName)
+        : "Driver pending",
+    },
+    id: plan.id,
+    index,
+    name: plan.routeName,
+    plannedDriveMinutes: plan.plannedDriveMinutes,
+    plannedStopMinutes: plan.plannedStopMinutes,
+    plannedTotalMinutes: plan.plannedTotalMinutes,
+    routeFallbackReason: resolvedRoute.fallbackReason,
+    routeLine: resolvedRoute.geometry,
+    routingProvider: resolvedRoute.provider,
+    stopCount: plan.stopCount,
+    stops: plan.stops.map((stop) => ({
+      accessSummary: stop.accessSummary,
+      address: stop.addressLine,
+      etaLabel: formatTime(stop.eta),
+      id: stop.id,
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+      mealSummary: stop.mealSummary,
+      name: stop.clientName,
+    })),
+    totalPlannedTime: formatRelativeMinutes(plan.plannedTotalMinutes),
+    vehicle: {
+      id: plan.vehicleId,
+      name: vehicle?.name ?? "Vehicle pending",
+    },
+    warnings: plan.warnings,
+  };
+}
+
+function applyPublicRouteAssignment(
+  plan: GeneratedRoutePlan,
+  volunteerId: string | undefined,
+  graph: Awaited<ReturnType<typeof loadDemoGraph>>
+) {
+  if (!volunteerId || volunteerId === plan.volunteerId) {
+    return plan;
+  }
+
+  const volunteer = graph.volunteerRows.find(
+    (entry) =>
+      entry.id === volunteerId && entry.active && entry.hasVehicleAccess
+  );
+  const vehicle = volunteer?.preferredVehicleId
+    ? graph.vehicleRows.find(
+        (entry) => entry.id === volunteer.preferredVehicleId && entry.active
+      )
+    : null;
+  const depot = vehicle
+    ? graph.depotRows.find((entry) => entry.id === vehicle.homeDepotId)
+    : null;
+
+  if (!volunteer || !vehicle || !depot) {
+    return plan;
+  }
+
+  const plannedDriveMinutes = calculateRouteDriveMinutes(
+    depot,
+    plan.stops.map((stop) => ({
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+    }))
+  );
+  const plannedStopMinutes = plan.stops.length * 2;
+  const plannedTotalMinutes = plannedDriveMinutes + plannedStopMinutes;
+  const warnings = [
+    ...plan.warnings.filter(
+      (warning) => !/Route must be split before assignment/i.test(warning)
+    ),
+    plannedTotalMinutes > PUBLIC_ROUTE_MAX_TOTAL_MINUTES
+      ? "Route must be split before assignment because it exceeds 3 hours."
+      : null,
+  ].filter(Boolean) as string[];
+
+  return {
+    ...plan,
+    capacityUtilizationPercent: Math.min(
+      100,
+      Math.round((plannedTotalMinutes / PUBLIC_ROUTE_MAX_TOTAL_MINUTES) * 100)
+    ),
+    plannedDriveMinutes,
+    plannedStopMinutes,
+    plannedTotalMinutes,
+    startDepotId: depot.id,
+    vehicleId: vehicle.id,
+    volunteerId: volunteer.id,
+    warnings,
+  } satisfies GeneratedRoutePlan;
+}
+
+function routePlanToInsert(
+  plan: GeneratedRoutePlan,
+  now: Date,
+  resolvedRoute?: ResolvedRoute,
+  waypointHash?: string
+) {
   return {
     id: plan.id,
     routeName: plan.routeName,
@@ -2953,10 +3400,191 @@ function routePlanToInsert(plan: GeneratedRoutePlan, now: Date) {
     capacityUtilizationPercent: plan.capacityUtilizationPercent,
     routeExplanation: plan.routeExplanation,
     warnings: plan.warnings,
+    routeDirections: resolvedRoute?.segments,
+    routeDistanceMeters: resolvedRoute?.distanceMeters,
+    routeDurationSeconds: resolvedRoute?.durationSeconds,
+    routeFallbackReason: resolvedRoute?.fallbackReason,
+    routeGeometry: resolvedRoute?.geometry,
+    routedAt: resolvedRoute ? now : undefined,
+    routingProvider: resolvedRoute?.provider,
+    routingWaypointHash: waypointHash,
     lastActivityAt: now,
     createdAt: now,
     updatedAt: now,
   } satisfies typeof routes.$inferInsert;
+}
+
+export async function previewUnroutedPublicTodayRoutes(
+  options: {
+    batchId?: string;
+  } = {}
+): Promise<PublicRoutePreview> {
+  const graph = await loadDemoGraph();
+  const batchId = options.batchId ?? publicBatchId();
+  const result = publicPlannerInput(graph, batchId, "route-public-preview");
+  const plannerRequestById = new Map(
+    result.scopedRequests.map((request) => [request.id, request] as const)
+  );
+  const plans = await Promise.all(
+    result.plans.map((plan, index) => publicPreviewPlan(plan, graph, index))
+  );
+
+  return {
+    batchId,
+    driverOptions: publicRouteDriverOptions(graph),
+    excludedRequests: result.excludedRequests.map((exclusion) => ({
+      clientName:
+        plannerRequestById.get(exclusion.requestId)?.clientName ??
+        "Unknown neighbour",
+      reason: exclusion.reason,
+      requestId: exclusion.requestId,
+    })),
+    maxRouteMinutes: PUBLIC_ROUTE_MAX_TOTAL_MINUTES,
+    plans,
+    splitCount: result.splitCount,
+    stopCount: result.scopedRequests.length,
+    unrouted: buildUnroutedPublicTodaySummary(graph),
+  };
+}
+
+export async function commitUnroutedPublicTodayRoutes(
+  rawInput: z.input<typeof publicRouteCommitSchema> = {}
+): Promise<RouteGenerationSummary> {
+  const input = publicRouteCommitSchema.parse(rawInput);
+  const database = getDb();
+  const graph = await loadDemoGraph();
+  const now = new Date();
+  const batchId = input.batchId ?? publicBatchId();
+  const result = publicPlannerInput(graph, batchId, "route-public");
+  const plannerRequestById = new Map(
+    result.scopedRequests.map((request) => [request.id, request] as const)
+  );
+  const assignmentByRouteIndex = new Map(
+    input.assignments.map((assignment) => [
+      assignment.routeIndex,
+      assignment.volunteerId,
+    ])
+  );
+  const plans = result.plans.map((plan, index) =>
+    applyPublicRouteAssignment(plan, assignmentByRouteIndex.get(index), graph)
+  );
+  const resolvedByRouteId = new Map<
+    string,
+    { route: ResolvedRoute; waypointHash: string }
+  >();
+
+  for (const plan of plans) {
+    const waypoints = routePlanWaypoints(plan, graph);
+    resolvedByRouteId.set(plan.id, {
+      route: await resolveStreetRoute(waypoints),
+      waypointHash: getRoutingWaypointHash(waypoints),
+    });
+  }
+
+  if (plans.length > 0) {
+    await database.insert(routes).values(
+      plans.map((plan) => {
+        const resolved = resolvedByRouteId.get(plan.id);
+
+        return routePlanToInsert(
+          plan,
+          now,
+          resolved?.route,
+          resolved?.waypointHash
+        );
+      })
+    );
+  }
+
+  const stopInserts = plans.flatMap((plan) =>
+    plan.stops.map((stop) => ({
+      id: `stop-${plan.id.replace(/^route-public-/, "")}-${stop.sequence}`,
+      routeId: plan.id,
+      requestId: stop.requestId,
+      clientId: stop.clientId,
+      sequence: stop.sequence,
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+      addressLine: stop.addressLine,
+      eta: stop.eta,
+      mealSummary: stop.mealSummary,
+      itemSummary: stop.itemSummary,
+      accessSummary: stop.accessSummary,
+      originalMessageExcerpt: stop.originalMessageExcerpt,
+      dueBucketOrigin: stop.dueBucketOrigin,
+      status: stop.sequence === 1 ? ("ready" as const) : ("planned" as const),
+      createdAt: now,
+      updatedAt: now,
+    }))
+  );
+  const stopIdByRequestId = new Map(
+    stopInserts.map((stop) => [stop.requestId, stop.id] as const)
+  );
+  const mealItemInserts = plans.flatMap((plan) =>
+    plan.stops.flatMap((stop) =>
+      stop.mealItems.map((item) => ({
+        id: `${stopIdByRequestId.get(stop.requestId)}-${item.mealId}`,
+        routeStopId: stopIdByRequestId.get(stop.requestId) ?? stop.id,
+        mealId: item.mealId,
+        mealNameSnapshot: item.mealNameSnapshot,
+        quantity: item.quantity,
+        dietaryTags: item.dietaryTags,
+        allergenFlags: item.allergenFlags,
+        refrigerated: item.refrigerated,
+        createdAt: now,
+        updatedAt: now,
+      }))
+    )
+  );
+
+  if (stopInserts.length > 0) {
+    await database.insert(routeStops).values(stopInserts);
+  }
+
+  if (mealItemInserts.length > 0) {
+    await database.insert(routeStopMealItems).values(mealItemInserts);
+  }
+
+  for (const plan of plans) {
+    for (const stop of plan.stops) {
+      await database
+        .update(deliveryRequests)
+        .set({
+          assignedRouteId: plan.id,
+          assignedStopSequence: stop.sequence,
+          routingHoldReason: null,
+          scheduledDate: plan.serviceDate,
+          status: "assigned",
+          updatedAt: now,
+        })
+        .where(eq(deliveryRequests.id, stop.requestId));
+    }
+  }
+
+  for (const exclusion of result.excludedRequests) {
+    await database
+      .update(deliveryRequests)
+      .set({
+        routingHoldReason: exclusion.reason,
+        updatedAt: now,
+      })
+      .where(eq(deliveryRequests.id, exclusion.requestId));
+  }
+
+  return {
+    excludedRequests: result.excludedRequests.map((exclusion) => ({
+      clientName:
+        plannerRequestById.get(exclusion.requestId)?.clientName ??
+        "Unknown neighbour",
+      reason: exclusion.reason,
+      requestId: exclusion.requestId,
+    })),
+    routeCount: plans.length,
+    routeIds: plans.map((plan) => plan.id),
+    routeNames: plans.map((plan) => plan.routeName),
+    stopCount: plans.reduce((sum, plan) => sum + plan.stopCount, 0),
+    unroutedPublicToday: buildUnroutedPublicTodaySummary(await loadDemoGraph()),
+  };
 }
 
 export async function generateRoutes(): Promise<RouteGenerationSummary> {
@@ -4046,6 +4674,7 @@ export async function getAdminRoutesData(): Promise<AdminRoutesData> {
   const routeSummaries = buildRouteSummaries(graph);
   const selectedRoute = routeSummaries[0];
   const routeOptions = await buildDriverRouteOptions(graph);
+  const unroutedPublicToday = buildUnroutedPublicTodaySummary(graph);
 
   return {
     driverCapacity: buildDriverCapacity(graph),
@@ -4070,6 +4699,7 @@ export async function getAdminRoutesData(): Promise<AdminRoutesData> {
     routeOptions,
     routePlans: buildRoutePlans(graph),
     routeSummaries,
+    unroutedPublicToday,
     selectedRoute: {
       id: selectedRoute.id,
       name: selectedRoute.name,
@@ -4293,11 +4923,27 @@ export async function getDriverOfferData(): Promise<DriverOfferData> {
   const routeSummaries = buildRouteSummaries(graph);
   const routeOptions = await buildDriverRouteOptions(graph);
   const suggestedRoute =
+    routeSummaries.find((entry) => isGeneratedPublicRouteId(entry.id)) ??
     routeSummaries.find((entry) => entry.status === "on-track") ??
     routeSummaries[0];
   const suggestedOption =
     routeOptions.find((entry) => entry.id === suggestedRoute.id) ??
     routeOptions[0];
+  const availabilityOptions = Array.from(
+    new Set([
+      60,
+      90,
+      120,
+      150,
+      Math.min(
+        PUBLIC_ROUTE_MAX_TOTAL_MINUTES,
+        Math.ceil((suggestedOption?.plannedTotalMinutes ?? 60) / 30) * 30
+      ),
+      PUBLIC_ROUTE_MAX_TOTAL_MINUTES,
+    ])
+  )
+    .filter((minutes) => minutes > 0)
+    .sort((left, right) => left - right);
   const personas = Array.from(
     new Map(
       routeOptions.map((route) => [
@@ -4312,7 +4958,7 @@ export async function getDriverOfferData(): Promise<DriverOfferData> {
   );
 
   return {
-    availabilityOptions: [60, 90, 120, 150],
+    availabilityOptions,
     liveMarkers: buildLiveMarkers(
       graph.routeRows,
       graph.stopRows,

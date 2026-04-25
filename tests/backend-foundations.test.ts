@@ -6,6 +6,7 @@ import {
   approveDraft,
   approveRoute,
   completeDriverStop,
+  commitUnroutedPublicTodayRoutes,
   createGmailIntake,
   createRequestIntake,
   createVolunteerIntake,
@@ -22,7 +23,9 @@ import {
   ignoreDraft,
   parseInventoryDocument,
   parsePublicIntakeDraft,
+  previewUnroutedPublicTodayRoutes,
   recordManualInventoryEntry,
+  resetAndSeedDemoData,
   resetDemoData,
   resetRouteSession,
   seedDemoData,
@@ -31,11 +34,13 @@ import {
 import {
   clients,
   deliverableMeals,
+  deliveryRequests,
   driverSessions,
   ingredientItems,
   intakeDrafts,
   intakeMessages,
   routeStops,
+  routeStopMealItems,
   routes,
   volunteerAvailability,
   volunteers,
@@ -100,6 +105,103 @@ describeWithTestDatabase("backend foundations", () => {
     ]);
     expect(inboxAfterParse.selectedItem.accessNotes).toBe(
       "Please call from the lobby."
+    );
+  });
+
+  it("approves public requests with coordinates and scopes them into today's unrouted count", async () => {
+    const db = getDb();
+    const created = await createRequestIntake({
+      firstName: "Rina",
+      lastName: "Public",
+      addressLine1: "901 Bay St",
+      dueBucket: "today",
+      householdSize: 2,
+      message:
+        "Two meals would help today. Please call when you are close to the lobby.",
+      municipality: "Victoria",
+      requestedMealCount: 2,
+    });
+
+    await parsePublicIntakeDraft(created.draftId);
+    const approved = await approveDraft(created.draftId);
+    const [request] = await db
+      .select()
+      .from(deliveryRequests)
+      .where(eq(deliveryRequests.id, approved.recordId));
+    const [client] = await db
+      .select()
+      .from(clients)
+      .where(eq(clients.id, request.clientId));
+    const routesData = await getAdminRoutesData();
+
+    expect(client.latitude).toBeTypeOf("number");
+    expect(client.longitude).toBeTypeOf("number");
+    expect(routesData.unroutedPublicToday.count).toBe(1);
+    expect(routesData.unroutedPublicToday.stops[0]?.id).toBe(request.id);
+  });
+
+  it("commits scoped public-form routes without deleting seeded routes", async () => {
+    const db = getDb();
+    const seededRouteCount = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(routes);
+    const created = await createRequestIntake({
+      firstName: "Mara",
+      lastName: "Scoped",
+      addressLine1: "742 Cook Street",
+      dueBucket: "today",
+      householdSize: 1,
+      message: "A couple of meals today would help. Side door is easiest.",
+      municipality: "Victoria",
+      requestedMealCount: 2,
+    });
+
+    await parsePublicIntakeDraft(created.draftId);
+    const approved = await approveDraft(created.draftId);
+    const preview = await previewUnroutedPublicTodayRoutes({
+      batchId: "commit-scope-test",
+    });
+    const summary = await commitUnroutedPublicTodayRoutes({
+      batchId: "commit-scope-test",
+      assignments: [],
+    });
+    const [updatedRequest] = await db
+      .select()
+      .from(deliveryRequests)
+      .where(eq(deliveryRequests.id, approved.recordId));
+    const generatedRoutes = await db
+      .select()
+      .from(routes)
+      .where(sql`${routes.id} like 'route-public-commit-scope-test%'`);
+    const generatedStops = await db
+      .select()
+      .from(routeStops)
+      .where(eq(routeStops.requestId, approved.recordId));
+    const generatedMealItems = await db
+      .select()
+      .from(routeStopMealItems)
+      .where(eq(routeStopMealItems.routeStopId, generatedStops[0]!.id));
+    const [seededRoute] = await db
+      .select()
+      .from(routes)
+      .where(eq(routes.id, "route-victoria-core"));
+    const finalRouteCount = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(routes);
+
+    expect(preview.stopCount).toBe(1);
+    expect(summary.routeCount).toBe(1);
+    expect(summary.stopCount).toBe(1);
+    expect(generatedRoutes).toHaveLength(1);
+    expect(generatedRoutes[0]?.plannedTotalMinutes).toBeLessThanOrEqual(180);
+    expect(generatedStops).toHaveLength(1);
+    expect(generatedMealItems.length).toBeGreaterThan(0);
+    expect(updatedRequest.assignedRouteId).toBe(generatedRoutes[0]?.id);
+    expect(updatedRequest.assignedStopSequence).toBe(1);
+    expect(updatedRequest.status).toBe("assigned");
+    expect(seededRoute).toBeTruthy();
+    expect(Number(finalRouteCount[0]?.count ?? 0)).toBe(
+      Number(seededRouteCount[0]?.count ?? 0) + 1
     );
   });
 
@@ -404,6 +506,34 @@ describeWithTestDatabase("backend foundations", () => {
     expect(persistedRoute?.routingWaypointHash).toBeTruthy();
   });
 
+  it("prefers the newest generated public route in driver offers", async () => {
+    const created = await createRequestIntake({
+      firstName: "Theo",
+      lastName: "Driver",
+      addressLine1: "608 Johnson Street",
+      dueBucket: "today",
+      householdSize: 1,
+      message: "One meal today would help. Text when you arrive.",
+      municipality: "Victoria",
+      requestedMealCount: 1,
+    });
+
+    await parsePublicIntakeDraft(created.draftId);
+    await approveDraft(created.draftId);
+    await commitUnroutedPublicTodayRoutes({
+      batchId: "driver-offer-test",
+      assignments: [],
+    });
+
+    const offer = await getDriverOfferData();
+
+    expect(offer.suggestedRoute.routeId).toMatch(
+      /^route-public-driver-offer-test/
+    );
+    expect(offer.routeOptions[0]?.id).toBe(offer.suggestedRoute.routeId);
+    expect(offer.availabilityOptions).toContain(180);
+  });
+
   it("persists generated route plans within the time cap", async () => {
     const db = getDb();
     const summary = await generateRoutes();
@@ -663,7 +793,9 @@ describeWithTestDatabase("backend foundations", () => {
     );
 
     if (!firstStop) {
-      throw new Error("Expected route-victoria-core to have at least one stop.");
+      throw new Error(
+        "Expected route-victoria-core to have at least one stop."
+      );
     }
 
     await completeDriverStop({
@@ -785,5 +917,71 @@ describeWithTestDatabase("backend foundations", () => {
       .from(routes);
 
     expect(Number(seededRouteCount[0]?.count ?? 0)).toBeGreaterThan(0);
+  });
+
+  it("reset-and-seed removes custom public requests and generated routes", async () => {
+    const db = getDb();
+    const baseline = {
+      clients: await db.select({ count: sql<number>`count(*)` }).from(clients),
+      requests: await db
+        .select({ count: sql<number>`count(*)` })
+        .from(deliveryRequests),
+      routes: await db.select({ count: sql<number>`count(*)` }).from(routes),
+    };
+    const created = await createRequestIntake({
+      firstName: "Reset",
+      lastName: "Case",
+      addressLine1: "912 Pandora Avenue",
+      dueBucket: "today",
+      householdSize: 1,
+      message: "Please leave the meals with the front desk.",
+      municipality: "Victoria",
+      requestedMealCount: 2,
+    });
+
+    await parsePublicIntakeDraft(created.draftId);
+    await approveDraft(created.draftId);
+    await commitUnroutedPublicTodayRoutes({
+      batchId: "reset-flow-test",
+      assignments: [],
+    });
+
+    const customRoutesBefore = await db
+      .select()
+      .from(routes)
+      .where(sql`${routes.id} like 'route-public-reset-flow-test%'`);
+
+    expect(customRoutesBefore).toHaveLength(1);
+
+    await resetAndSeedDemoData();
+    await resetAndSeedDemoData();
+
+    const customRoutesAfter = await db
+      .select()
+      .from(routes)
+      .where(sql`${routes.id} like 'route-public-reset-flow-test%'`);
+    const customIntakesAfter = await db
+      .select()
+      .from(intakeMessages)
+      .where(eq(intakeMessages.id, created.intakeId));
+    const countsAfter = {
+      clients: await db.select({ count: sql<number>`count(*)` }).from(clients),
+      requests: await db
+        .select({ count: sql<number>`count(*)` })
+        .from(deliveryRequests),
+      routes: await db.select({ count: sql<number>`count(*)` }).from(routes),
+    };
+
+    expect(customRoutesAfter).toHaveLength(0);
+    expect(customIntakesAfter).toHaveLength(0);
+    expect(Number(countsAfter.clients[0]?.count ?? 0)).toBe(
+      Number(baseline.clients[0]?.count ?? 0)
+    );
+    expect(Number(countsAfter.requests[0]?.count ?? 0)).toBe(
+      Number(baseline.requests[0]?.count ?? 0)
+    );
+    expect(Number(countsAfter.routes[0]?.count ?? 0)).toBe(
+      Number(baseline.routes[0]?.count ?? 0)
+    );
   });
 });

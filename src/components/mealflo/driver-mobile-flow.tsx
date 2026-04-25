@@ -291,35 +291,25 @@ function pickRoute(
   availabilityOptions: number[],
   minutesAvailable: number
 ) {
-  const sortedRoutes = routes
-    .slice()
-    .sort(
-      (left, right) =>
-        left.plannedTotalMinutes - right.plannedTotalMinutes ||
-        left.name.localeCompare(right.name)
-    );
-  const fitting = sortedRoutes
-    .filter((route) => route.plannedTotalMinutes <= minutesAvailable)
-    .sort(
-      (left, right) =>
-        right.plannedTotalMinutes - left.plannedTotalMinutes ||
-        left.name.localeCompare(right.name)
-    );
+  const orderedRoutes = routes.slice();
+  const fitting = orderedRoutes.filter(
+    (route) => route.plannedTotalMinutes <= minutesAvailable
+  );
 
   const selectedAvailabilityIndex = availabilityOptions.findIndex(
     (minutes) => minutes === minutesAvailable
   );
   const fallbackByIndex =
     selectedAvailabilityIndex >= 0
-      ? sortedRoutes[
+      ? orderedRoutes[
           Math.min(
             selectedAvailabilityIndex,
-            Math.max(sortedRoutes.length - 1, 0)
+            Math.max(orderedRoutes.length - 1, 0)
           )
         ]
       : null;
 
-  return fitting[0] ?? fallbackByIndex ?? sortedRoutes[0] ?? routes[0];
+  return fitting[0] ?? fallbackByIndex ?? orderedRoutes[0] ?? routes[0];
 }
 
 function findClosestLineIndex(
@@ -1032,23 +1022,31 @@ function DriverMobileFlowReady({
   initialRouteId,
   initialScreen = "availability",
 }: DriverMobileFlowProps) {
-  const defaultMinutes = data.availabilityOptions.includes(60)
-    ? 60
-    : (data.availabilityOptions[0] ?? 60);
+  const suggestedOption = useMemo(
+    () =>
+      data.routeOptions.find(
+        (route) => route.id === data.suggestedRoute.routeId
+      ) ?? data.routeOptions[0],
+    [data.routeOptions, data.suggestedRoute.routeId]
+  );
+  const defaultMinutes =
+    data.availabilityOptions.find(
+      (minutes) => minutes >= (suggestedOption?.plannedTotalMinutes ?? 60)
+    ) ??
+    data.availabilityOptions.at(-1) ??
+    60;
   const initialRoute = useMemo(
     () =>
       data.routeOptions.find((route) => route.id === initialRouteId) ??
+      suggestedOption ??
       pickRoute(data.routeOptions, data.availabilityOptions, defaultMinutes) ??
-      data.routeOptions.find(
-        (route) => route.id === data.suggestedRoute.routeId
-      ) ??
       data.routeOptions[0]!,
     [
       data.availabilityOptions,
       data.routeOptions,
-      data.suggestedRoute.routeId,
       defaultMinutes,
       initialRouteId,
+      suggestedOption,
     ]
   );
   const [selectedMinutes, setSelectedMinutes] = useState(defaultMinutes);
