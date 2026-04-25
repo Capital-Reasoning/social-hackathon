@@ -78,37 +78,34 @@ const mapLegendItems = [
   },
 ] as const;
 
-function MapLegend() {
+function MapLegendOverlay() {
   return (
-    <ul
-      aria-label="Map marker legend"
-      className="text-muted flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium"
-    >
-      {mapLegendItems.map((item) => (
-        <li key={item.label} className="inline-flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className={`block h-3.5 w-3.5 rounded-full border-[2px] shadow-[0_0_0_2px_rgba(255,255,255,0.92)] ${item.className}`}
-          />
-          <span>{item.label}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="pointer-events-none absolute bottom-3 left-3 z-10 sm:bottom-4 sm:left-4">
+      <ul
+        aria-label="Map marker legend"
+        className="border-line/80 text-ink pointer-events-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-full border-[1.5px] bg-white/95 px-3 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(24,24,60,0.14)] backdrop-blur-[6px]"
+      >
+        {mapLegendItems.map((item) => (
+          <li key={item.label} className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className={`block h-2.5 w-2.5 rounded-full border-[1.5px] shadow-[0_0_0_1.5px_rgba(255,255,255,0.92)] ${item.className}`}
+            />
+            <span>{item.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
 function LiveMapHeader({ activeDriverCount }: { activeDriverCount: number }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-baseline">
+    <div className="flex flex-wrap items-baseline justify-between gap-3">
       <h2 className="font-display text-ink text-[28px] font-semibold tracking-[-0.02em]">
         Live map
       </h2>
-      <div className="min-w-0 sm:justify-self-center">
-        <MapLegend />
-      </div>
-      <div className="sm:justify-self-end">
-        <MapActivityIndicator count={activeDriverCount} />
-      </div>
+      <MapActivityIndicator count={activeDriverCount} />
     </div>
   );
 }
@@ -196,7 +193,9 @@ export function AdminLiveMap({
         markerScale="large"
         markerStyle="dot"
         markers={markers}
-      />
+      >
+        <MapLegendOverlay />
+      </MapCanvas>
     </section>
   );
 }

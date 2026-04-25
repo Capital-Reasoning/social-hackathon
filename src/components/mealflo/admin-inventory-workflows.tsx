@@ -376,7 +376,7 @@ export function AdminInventoryWorkflows({
   };
 
   return (
-    <div className="grid items-stretch gap-4 xl:grid-cols-2">
+    <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]">
       <section className="flex min-h-0 flex-col gap-3">
         <CardHeader
           title="Manual entry"

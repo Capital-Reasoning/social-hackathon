@@ -247,7 +247,7 @@ function SummaryStatusStrip({
   return (
     <section className="border-line rounded-[16px] border-[1.5px] bg-white px-4 py-6 sm:px-5">
       <div
-        className={`grid divide-y divide-[rgba(24,24,60,0.08)] sm:grid-cols-2 sm:divide-y-0 xl:divide-x ${
+        className={`grid gap-y-3 gap-x-6 sm:grid-cols-2 ${
           items.length === 3 ? "xl:grid-cols-3" : "xl:grid-cols-4"
         }`}
       >
@@ -255,7 +255,7 @@ function SummaryStatusStrip({
           return (
             <div
               key={item.id}
-              className="flex min-w-0 items-center gap-3 py-3 first:pt-0 last:pb-0 sm:px-4 sm:py-0 xl:first:pl-0 xl:last:pr-0 sm:[&:nth-child(even)]:pr-0 sm:[&:nth-child(odd)]:pl-0"
+              className="flex min-w-0 items-center gap-3 sm:py-0"
             >
               <MealfloIcon name={item.icon} size={38} />
               <div className="min-w-0">
@@ -765,13 +765,12 @@ export async function AdminInventoryView() {
                     {item.quantity}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge
-                        size="sm"
-                        tone={item.status === "low" ? "warning" : "success"}
-                      >
-                        {item.status === "low" ? "Low" : "Ready"}
-                      </Badge>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {item.status === "low" ? (
+                        <Badge size="sm" tone="warning">
+                          Low
+                        </Badge>
+                      ) : null}
                       {item.tags.map((tag) => (
                         <Badge
                           key={tag}
@@ -819,16 +818,16 @@ export async function AdminInventoryView() {
                   </TableCell>
                   <TableCell>{item.quantity}</TableCell>
                   <TableCell>
-                    <Badge
-                      size="sm"
-                      tone={
-                        item.perishability === "Use today" || item.refrigerated
-                          ? "warning"
-                          : "success"
-                      }
-                    >
-                      {displayKitchenLabel(item.perishability)}
-                    </Badge>
+                    {item.perishability === "Use today" ||
+                    item.refrigerated ? (
+                      <Badge size="sm" tone="warning">
+                        {displayKitchenLabel(item.perishability)}
+                      </Badge>
+                    ) : (
+                      <span className="border-line text-muted inline-flex h-7 items-center rounded-full border-[1.5px] bg-white px-2.5 text-xs font-semibold">
+                        {displayKitchenLabel(item.perishability)}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted">{item.source}</TableCell>
                 </TableRow>

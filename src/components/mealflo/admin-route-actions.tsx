@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/mealflo/badge";
 import { Button } from "@/components/mealflo/button";
-import { ChoiceChip } from "@/components/mealflo/field";
 import { MealfloIcon } from "@/components/mealflo/icon";
 import { ModalLayer } from "@/components/mealflo/modal-layer";
 import { cn } from "@/lib/utils";
@@ -207,33 +206,49 @@ export function AdminRouteActions({
 
             <div className="min-h-0 overflow-y-auto px-5 py-4">
               {activeDialog === "assign" ? (
-                <div className="grid gap-3">
-                  {driverOptions.map((option) => (
-                    <button
-                      key={option}
-                      className={cn(
-                        "border-line hover:border-line-strong flex min-h-[58px] items-center justify-between gap-3 rounded-[14px] border-[1.5px] bg-white px-4 py-3 text-left transition-[transform,background-color,border-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)]",
-                        pendingDriver === option &&
-                          "border-[rgba(120,144,250,0.5)] bg-[var(--mf-color-blue-50)]"
-                      )}
-                      type="button"
-                      onClick={() => setPendingDriver(option)}
-                    >
-                      <span>
-                        <span className="text-ink block font-semibold">
-                          {option}
+                <div className="grid gap-2" role="radiogroup">
+                  {driverOptions.map((option) => {
+                    const selected = pendingDriver === option;
+
+                    return (
+                      <button
+                        key={option}
+                        aria-checked={selected}
+                        role="radio"
+                        className={cn(
+                          "border-line hover:border-line-strong flex min-h-[58px] items-center gap-3 rounded-[14px] border-[1.5px] bg-white px-4 py-3 text-left transition-[transform,background-color,border-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)]",
+                          selected &&
+                            "border-[rgba(120,144,250,0.5)] bg-[var(--mf-color-blue-50)]"
+                        )}
+                        type="button"
+                        onClick={() => setPendingDriver(option)}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] transition-[border-color,background-color] duration-[var(--mf-duration-base)] ease-out",
+                            selected
+                              ? "border-[var(--mf-color-blue-300)] bg-[var(--mf-color-blue-300)]"
+                              : "border-[rgba(24,24,60,0.24)] bg-white"
+                          )}
+                        >
+                          {selected ? (
+                            <span className="block h-2 w-2 rounded-full bg-white" />
+                          ) : null}
                         </span>
-                        <span className="text-muted text-sm">
-                          {option === "Unassigned"
-                            ? "Leave this route open for a volunteer."
-                            : "Show this driver on the route."}
+                        <span className="min-w-0 flex-1">
+                          <span className="text-ink block font-semibold">
+                            {option}
+                          </span>
+                          {option === "Unassigned" ? (
+                            <span className="text-muted text-sm">
+                              Leave this route open for a volunteer.
+                            </span>
+                          ) : null}
                         </span>
-                      </span>
-                      <ChoiceChip selected={pendingDriver === option}>
-                        {pendingDriver === option ? "Selected" : "Choose"}
-                      </ChoiceChip>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="grid gap-2">
@@ -243,15 +258,24 @@ export function AdminRouteActions({
                     return (
                       <button
                         key={stop.id}
+                        aria-pressed={selected}
                         className={cn(
                           "border-line hover:border-line-strong flex min-h-[58px] items-center gap-3 rounded-[14px] border-[1.5px] bg-white px-4 py-3 text-left transition-[transform,background-color,border-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)]",
-                          selected &&
-                            "border-[rgba(120,144,250,0.45)] bg-[var(--mf-color-blue-50)]"
+                          selected
+                            ? "border-[rgba(120,144,250,0.45)] bg-[var(--mf-color-blue-50)]"
+                            : "opacity-90"
                         )}
                         type="button"
                         onClick={() => togglePendingStop(stop.id)}
                       >
-                        <span className="bg-primary text-ink inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
+                        <span
+                          className={cn(
+                            "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-[background-color,color] duration-[var(--mf-duration-base)] ease-out",
+                            selected
+                              ? "bg-primary text-ink"
+                              : "border-line border-[1.5px] bg-white text-muted"
+                          )}
+                        >
                           {index + 1}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -259,12 +283,25 @@ export function AdminRouteActions({
                             {stop.label}
                           </span>
                           <span className="text-muted text-sm">
-                            {selected ? "Included" : "Removed from preview"}
+                            {selected ? "Included in route" : "Skipped"}
                           </span>
                         </span>
-                        <ChoiceChip selected={selected}>
-                          {selected ? "Included" : "Add back"}
-                        </ChoiceChip>
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border-[1.5px] transition-[background-color,border-color] duration-[var(--mf-duration-base)] ease-out",
+                            selected
+                              ? "border-[var(--mf-color-blue-300)] bg-[var(--mf-color-blue-300)]"
+                              : "border-line bg-white"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "absolute top-0.5 inline-block h-5 w-5 rounded-full bg-white shadow-[0_2px_4px_rgba(24,24,60,0.18)] transition-transform duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)]",
+                              selected ? "translate-x-[22px]" : "translate-x-0.5"
+                            )}
+                          />
+                        </span>
                       </button>
                     );
                   })}

@@ -56,8 +56,9 @@ export function AdminDirectoryTable({ rows }: { rows: AdminDirectoryRow[] }) {
   return (
     <div className="space-y-4">
       <div
-        className="border-line inline-grid w-full max-w-[360px] grid-cols-2 rounded-full border-[1.5px] bg-white p-1"
+        className="border-line/70 inline-flex items-center gap-6 border-b-[1.5px] pb-0"
         aria-label="Directory type"
+        role="tablist"
       >
         {filters.map((item) => {
           const active = item.key === filter;
@@ -68,14 +69,11 @@ export function AdminDirectoryTable({ rows }: { rows: AdminDirectoryRow[] }) {
               type="button"
               aria-pressed={active}
               className={cn(
-                "min-h-[44px] rounded-full px-4 text-sm font-semibold transition-[transform,background-color,border-color,color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)]",
+                "relative -mb-[1.5px] min-h-[40px] px-1 pb-2 text-sm font-semibold transition-[color,border-color] duration-[var(--mf-duration-base)] ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)]",
                 active
-                  ? "bg-[var(--mf-color-yellow-300)]"
-                  : "hover:bg-[var(--mf-color-yellow-50)]"
+                  ? "text-ink border-b-[2.5px] border-[var(--mf-color-ink)]"
+                  : "text-muted hover:text-ink border-b-[2.5px] border-transparent"
               )}
-              style={{
-                color: active ? "var(--mf-color-ink)" : "var(--mf-color-muted)",
-              }}
               onClick={() => setFilter(item.key)}
             >
               {item.label}

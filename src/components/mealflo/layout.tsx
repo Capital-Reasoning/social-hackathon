@@ -38,13 +38,22 @@ function NavLink({
       aria-current={active ? "page" : undefined}
       style={{ color: "var(--mf-color-ink)" }}
       className={cn(
-        "inline-flex min-h-[52px] items-center gap-2.5 rounded-full border-[1.5px] px-5 py-2 text-lg font-semibold transition-[transform,background-color,border-color,color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5",
+        "inline-flex min-h-[40px] items-center gap-2 rounded-full border-[1.5px] px-3 py-1.5 text-sm font-semibold transition-[transform,background-color,border-color,color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 sm:min-h-[52px] sm:gap-2.5 sm:px-5 sm:py-2 sm:text-lg",
         active
           ? "border-[rgba(170,120,0,0.4)] bg-white"
           : "border-transparent bg-transparent hover:border-[rgba(170,120,0,0.2)] hover:bg-[rgba(255,255,255,0.56)]"
       )}
     >
-      <MealfloIcon name={icon} size={32} />
+      <MealfloIcon
+        name={icon}
+        size={22}
+        className="sm:hidden"
+      />
+      <MealfloIcon
+        name={icon}
+        size={32}
+        className="hidden sm:inline-block"
+      />
       <span className="text-[var(--mf-color-ink)]">{label}</span>
     </Link>
   );
@@ -60,15 +69,20 @@ export function TopBar({
     <header className="bg-primary sticky top-0 z-30 border-b-[1.5px] border-[rgba(170,120,0,0.35)]">
       <div
         className={cn(
-          "mx-auto grid min-h-[76px] gap-3 px-3 py-0 sm:px-4 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:px-4",
+          "mx-auto grid min-h-[58px] gap-2 px-3 py-2 sm:min-h-[76px] sm:gap-3 sm:px-4 sm:py-0 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:px-5",
           maxWidthClassName
         )}
       >
         <MealfloLogo
-          className="shrink-0 gap-1.5"
-          iconSize={58}
+          className="shrink-0 gap-1.5 sm:hidden"
+          showIcon={false}
           showSubtitle={false}
-          swatchSize={76}
+          textClassName="text-[1.15rem] leading-none"
+        />
+        <MealfloLogo
+          className="hidden shrink-0 gap-1.5 sm:inline-flex"
+          showIcon={false}
+          showSubtitle={false}
           textClassName="text-[2rem] leading-none"
         />
         <nav
@@ -142,7 +156,7 @@ export function PageHeader({
     >
       <div className="space-y-2">
         <div className="space-y-2">
-          <h1 className="font-display text-ink text-[clamp(2.4rem,4vw,4.6rem)] font-bold tracking-[-0.03em]">
+          <h1 className="font-display text-ink text-[clamp(1.8rem,4vw,4.6rem)] font-bold tracking-[-0.03em]">
             {title}
           </h1>
           {note ? (

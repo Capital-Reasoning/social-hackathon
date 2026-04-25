@@ -293,32 +293,34 @@ export function AdminInboxReview({
               <Input
                 id="draft-email"
                 value={email}
-                leadingIcon="chat-bubble"
+                leadingIcon="send-airplane"
                 onChange={(event) => setEmail(event.target.value)}
               />
             </Field>
           </div>
-          <Field label="Need by" htmlFor="need-by">
-            <Select
-              id="need-by"
-              value={needBy}
-              leadingIcon="calendar"
-              onChange={(event) => setNeedBy(event.target.value)}
-            >
-              <option value="today">today</option>
-              <option value="tomorrow">tomorrow</option>
-              <option value="later">later</option>
-            </Select>
-          </Field>
-          <Field label="Household size" htmlFor="household-size">
-            <Input
-              id="household-size"
-              value={householdSize}
-              inputMode="numeric"
-              leadingIcon="group"
-              onChange={(event) => setHouseholdSize(event.target.value)}
-            />
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Need by" htmlFor="need-by">
+              <Select
+                id="need-by"
+                value={needBy}
+                leadingIcon="calendar"
+                onChange={(event) => setNeedBy(event.target.value)}
+              >
+                <option value="today">today</option>
+                <option value="tomorrow">tomorrow</option>
+                <option value="later">later</option>
+              </Select>
+            </Field>
+            <Field label="Household size" htmlFor="household-size">
+              <Input
+                id="household-size"
+                value={householdSize}
+                inputMode="numeric"
+                leadingIcon="group"
+                onChange={(event) => setHouseholdSize(event.target.value)}
+              />
+            </Field>
+          </div>
           <Field label="Food needs" htmlFor="dietary-flags">
             <Input
               id="dietary-flags"
@@ -351,7 +353,7 @@ export function AdminInboxReview({
               <Input
                 id="volunteer-email"
                 value={email}
-                leadingIcon="chat-bubble"
+                leadingIcon="send-airplane"
                 onChange={(event) => setEmail(event.target.value)}
               />
             </Field>

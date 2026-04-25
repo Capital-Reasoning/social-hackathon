@@ -157,13 +157,30 @@ function RequestReviewModal({
               )}
             >
               {showSource ? (
-                <section className="grid min-w-0 content-start gap-6">
+                <section className="grid min-w-0 content-start gap-4">
                   <h4 className="font-display text-ink text-[22px] font-semibold">
                     {sourceTitle}
                   </h4>
-                  <div className="border-line bg-surface-tint text-ink min-h-[360px] rounded-[16px] border-[1.5px] p-4 text-[15px] leading-7 whitespace-pre-wrap">
-                    {rawText || "No notes were included with this submission."}
+                  <div className="border-line bg-surface-tint text-ink rounded-[16px] border-[1.5px] p-4 text-[15px] leading-7 whitespace-pre-wrap">
+                    {rawText}
                   </div>
+                  <p className="text-muted inline-flex items-center gap-1.5 text-xs font-medium leading-5">
+                    <svg
+                      aria-hidden="true"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z" />
+                      <path d="M19 14l.7 1.9L21.6 17l-1.9.7L19 19.6l-.7-1.9L16.4 17l1.9-1.1z" />
+                    </svg>
+                    Fields on the right were parsed from this message with AI — review before approving.
+                  </p>
                 </section>
               ) : null}
 
@@ -363,19 +380,20 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
         wrapperClassName="min-h-[402px]"
       >
         <colgroup>
-          <col className="w-[34%]" />
-          <col className="w-[42%]" />
-          <col className="w-[11%]" />
-          <col className="w-[13%]" />
+          <col className="w-[36%]" />
+          <col className="w-[46%]" />
+          <col className="w-[12%]" />
+          <col className="w-[6%]" />
         </colgroup>
         <TableHead>
           <TableRow>
             <TableHeaderCell className="py-3">Name</TableHeaderCell>
             <TableHeaderCell className="py-3">Note</TableHeaderCell>
             <TableHeaderCell className="py-3">Source</TableHeaderCell>
-            <TableHeaderCell className="py-3 text-right">
-              Action
-            </TableHeaderCell>
+            <TableHeaderCell
+              aria-label="Open"
+              className="py-3 text-right"
+            />
           </TableRow>
         </TableHead>
         <TableBody>
@@ -383,18 +401,46 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
             rows.map((item) => {
               const isOpening = openingDraftId === item.id;
 
+              const isOther = rowKind(item) === "other";
+              const showAddress = !isOther && Boolean(item.address);
+              const rowDisabled = item.isParsing || openingDraftId !== null;
+              const openItem = () => {
+                if (rowDisabled) {
+                  return;
+                }
+                void openReview(item);
+              };
+
               return (
                 <TableRow
                   key={item.id}
-                  className="h-[108px] transition-[background-color,border-color] duration-[var(--mf-duration-base)] hover:bg-[rgba(253,248,228,0.48)]"
+                  aria-busy={isOpening}
+                  className={cn(
+                    "group/row h-[108px] transition-[background-color,border-color] duration-[var(--mf-duration-base)] hover:bg-[rgba(253,248,228,0.48)]",
+                    rowDisabled
+                      ? "cursor-default opacity-90"
+                      : "cursor-pointer focus-within:bg-[rgba(240,243,255,0.6)]"
+                  )}
+                  onClick={openItem}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openItem();
+                    }
+                  }}
+                  tabIndex={rowDisabled ? -1 : 0}
+                  role="button"
+                  aria-label={`Open ${item.sender} review`}
                 >
                   <TableCell className="py-3.5 align-middle">
                     <p className="text-ink truncate font-semibold">
                       {item.sender}
                     </p>
-                    <p className="text-muted mt-0.5 truncate text-sm leading-5">
-                      {item.address}
-                    </p>
+                    {showAddress ? (
+                      <p className="text-muted mt-0.5 truncate text-sm leading-5">
+                        {item.address}
+                      </p>
+                    ) : null}
                   </TableCell>
                   <TableCell className="py-3.5 align-middle">
                     <p className="text-ink truncate font-medium">
@@ -409,51 +455,45 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
                       <span className="text-ink font-medium">
                         {sourceLabel(item)}
                       </span>
-                      <span
-                        className={cn(
-                          "inline-flex min-h-[28px] items-center gap-2 rounded-full border-[1.5px] px-2.5 text-xs font-semibold",
-                          item.isParsing
-                            ? "text-info-text border-[rgba(120,144,250,0.35)] bg-[var(--mf-color-blue-50)]"
-                            : "text-success-text border-[rgba(78,173,111,0.28)] bg-[var(--mf-color-green-50)]"
-                        )}
-                      >
-                        {item.isParsing ? (
+                      {item.isParsing ? (
+                        <span className="text-info-text border-[rgba(120,144,250,0.35)] bg-[var(--mf-color-blue-50)] inline-flex min-h-[28px] items-center gap-2 rounded-full border-[1.5px] px-2.5 text-xs font-semibold">
                           <span
                             aria-hidden="true"
                             className="h-2 w-2 animate-pulse rounded-full bg-[var(--mf-color-blue-300)]"
                           />
-                        ) : null}
-                        {item.isParsing ? "Parsing" : "Ready"}
-                      </span>
+                          Parsing
+                        </span>
+                      ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="py-3.5 text-right align-middle">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      leading={
-                        isOpening ? (
-                          <span
-                            aria-hidden="true"
-                            className="h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--mf-color-blue-300)]"
-                          />
-                        ) : (
-                          <MealfloIcon name="pencil-edit" size={18} />
-                        )
-                      }
-                      className="min-w-[96px]"
-                      disabled={item.isParsing || openingDraftId !== null}
-                      onClick={() => void openReview(item)}
+                  <TableCell className="py-3.5 pr-3 text-right align-middle">
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "border-line text-muted inline-flex h-9 w-9 items-center justify-center rounded-full border-[1.5px] bg-white transition-[transform,background-color,color] duration-[var(--mf-duration-base)] ease-out",
+                        rowDisabled
+                          ? "opacity-60"
+                          : "group-hover/row:border-line-strong group-hover/row:text-ink group-hover/row:translate-x-0.5"
+                      )}
                     >
-                      {isOpening
-                        ? "Opening"
-                        : item.isParsing
-                          ? "Parsing"
-                          : rowKind(item) === "other"
-                            ? "View"
-                            : "Review"}
-                    </Button>
+                      {isOpening ? (
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--mf-color-blue-300)]" />
+                      ) : (
+                        <svg
+                          aria-hidden="true"
+                          fill="none"
+                          height="14"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2.5"
+                          viewBox="0 0 24 24"
+                          width="14"
+                        >
+                          <polyline points="9 6 15 12 9 18" />
+                        </svg>
+                      )}
+                    </span>
                   </TableCell>
                 </TableRow>
               );

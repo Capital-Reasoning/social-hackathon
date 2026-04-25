@@ -245,18 +245,35 @@ export function TodayRouteList({
             >
               <div className="min-h-0 overflow-hidden">
                 <div className="border-line/70 grid gap-5 border-t bg-[rgba(253,248,228,0.42)] px-4 py-5 sm:grid-cols-[minmax(0,1fr)_260px] sm:px-5">
-                  <div className="space-y-3">
-                    <h4 className="font-display text-ink pb-1 text-[24px] leading-tight font-semibold tracking-[-0.01em]">
-                      Food to load
-                    </h4>
-                    <div className="border-line/70 overflow-hidden rounded-[12px] border-[1.5px] bg-white">
-                      {activeStops.map((stop) => (
+                  <div className="space-y-2">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <h4 className="text-muted text-xs font-semibold tracking-[0.08em] uppercase">
+                        Food to load
+                      </h4>
+                      <span className="text-muted text-xs font-semibold">
+                        {activeStops.length}{" "}
+                        {activeStops.length === 1 ? "stop" : "stops"}
+                      </span>
+                    </div>
+                    <div
+                      key={isOpen ? `${route.id}-open` : `${route.id}-closed`}
+                      className="border-line/70 divide-line/70 overflow-hidden rounded-[12px] border-[1.5px] bg-white"
+                    >
+                      {activeStops.map((stop, stopIndex) => (
                         <div
                           key={stop.id}
-                          className="border-line/70 grid gap-2 border-b px-3 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] sm:px-4"
+                          className="border-line/70 grid items-start gap-3 border-b px-3 py-3 last:border-b-0 motion-reduce:opacity-100 motion-safe:opacity-0 motion-safe:[animation:mf-enter_360ms_var(--mf-ease-spring)_forwards] sm:grid-cols-[24px_minmax(0,0.7fr)_minmax(0,1.1fr)] sm:px-4"
+                          style={
+                            isOpen
+                              ? { animationDelay: `${stopIndex * 55}ms` }
+                              : undefined
+                          }
                         >
+                          <span className="text-muted text-xs font-semibold leading-6">
+                            {stopIndex + 1}.
+                          </span>
                           <div className="min-w-0">
-                            <p className="text-ink truncate text-sm font-semibold">
+                            <p className="text-ink truncate text-[15px] font-semibold leading-5">
                               {stop.name}
                             </p>
                             <p className="text-muted truncate text-xs leading-5">
