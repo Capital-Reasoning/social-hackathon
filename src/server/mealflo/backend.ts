@@ -57,6 +57,10 @@ const VANCOUVER_TZ = "America/Vancouver";
 const ANCHOR_STALE_AFTER_MS = 90_000;
 const PUBLIC_FORM_PARSING_VERSION = "public-form-parsing-v1";
 
+function publicFormRecordSuffix(now: Date) {
+  return `${now.getTime()}-${randomUUID().slice(0, 8)}`;
+}
+
 type Tone = "primary" | "success" | "warning" | "info";
 type LiveMarkerIcon =
   | "delivery-van"
@@ -1991,7 +1995,9 @@ async function performSeedDemoData() {
       : []),
     database.insert(intakeDrafts).values(intakeDraftsToInsert),
     database.insert(volunteers).values(dataset.volunteers),
-    database.insert(volunteerAvailability).values(dataset.volunteerAvailability),
+    database
+      .insert(volunteerAvailability)
+      .values(dataset.volunteerAvailability),
     database.insert(vehicles).values(dataset.vehicles),
     database.insert(clients).values(dataset.clients),
     database.insert(deliverableMeals).values(dataset.deliverableMeals),
@@ -2047,8 +2053,9 @@ export async function createRequestIntake(
   const database = getDb();
   const slug = slugify(`${input.firstName}-${input.lastName}`);
   const now = new Date();
-  const intakeId = `intake-${slug}-${now.getTime()}`;
-  const draftId = `draft-${slug}-${now.getTime()}`;
+  const recordSuffix = publicFormRecordSuffix(now);
+  const intakeId = `intake-${slug}-${recordSuffix}`;
+  const draftId = `draft-${slug}-${recordSuffix}`;
   const lowConfidenceFields = requestLowConfidenceFields(input);
   const rawBody = buildRequestRawBody(input);
 
@@ -2110,8 +2117,9 @@ export async function createVolunteerIntake(
   const database = getDb();
   const slug = slugify(`${input.firstName}-${input.lastName}`);
   const now = new Date();
-  const intakeId = `intake-${slug}-${now.getTime()}`;
-  const draftId = `draft-${slug}-${now.getTime()}`;
+  const recordSuffix = publicFormRecordSuffix(now);
+  const intakeId = `intake-${slug}-${recordSuffix}`;
+  const draftId = `draft-${slug}-${recordSuffix}`;
   const lowConfidenceFields = volunteerLowConfidenceFields(input);
   const rawBody = buildVolunteerRawBody(input);
 

@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getDb } from "@/server/db/client";
 import {
@@ -95,6 +95,59 @@ describe.sequential("backend foundations", () => {
     expect(inboxAfterParse.selectedItem.accessNotes).toBe(
       "Please call from the lobby."
     );
+  });
+
+  it("keeps public form ids unique when same-name submissions land together", async () => {
+    const submittedAt = new Date("2026-04-25T17:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(submittedAt);
+
+    try {
+      const [first, second, volunteer] = await Promise.all([
+        createRequestIntake({
+          firstName: "Same",
+          lastName: "Neighbor",
+          addressLine1: "901 Bay St",
+          dueBucket: "today",
+          householdSize: 1,
+          message: "Need one meal today.",
+          municipality: "Victoria",
+          requestedMealCount: 1,
+        }),
+        createRequestIntake({
+          firstName: "Same",
+          lastName: "Neighbor",
+          addressLine1: "902 Bay St",
+          dueBucket: "today",
+          householdSize: 1,
+          message: "Need one meal today.",
+          municipality: "Victoria",
+          requestedMealCount: 1,
+        }),
+        createVolunteerIntake({
+          firstName: "Same",
+          lastName: "Neighbor",
+          canClimbStairs: true,
+          canHandleColdChain: false,
+          hasVehicleAccess: true,
+          homeArea: "Fernwood",
+          homeMunicipality: "Victoria",
+          message: "Available for a quick route.",
+          minutesAvailable: 60,
+          windowEnd: "13:00",
+          windowStart: "12:00",
+        }),
+      ]);
+
+      expect(
+        new Set([first.intakeId, second.intakeId, volunteer.intakeId]).size
+      ).toBe(3);
+      expect(
+        new Set([first.draftId, second.draftId, volunteer.draftId]).size
+      ).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("ingests only Mealflo Gmail alias messages into pending drafts", async () => {
