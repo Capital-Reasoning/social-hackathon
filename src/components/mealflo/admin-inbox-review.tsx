@@ -10,6 +10,7 @@ import { InsetCard } from "@/components/mealflo/card";
 import type { AdminInboxData } from "@/server/mealflo/backend";
 
 type InboxReviewProps = {
+  onResolved?: (draftId: string) => void;
   primaryActionLabel?: string;
   selectedItem: AdminInboxData["selectedItem"];
 };
@@ -38,17 +39,19 @@ function toTags(value: string) {
     .filter(Boolean);
 }
 
-function contactPatch(value: string) {
-  if (value.includes("@")) {
+function splitName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) {
     return {
-      contactEmail: value,
-      contactPhone: undefined,
+      firstName: "Unknown",
+      lastName: "Neighbour",
     };
   }
 
   return {
-    contactEmail: undefined,
-    contactPhone: value,
+    firstName: parts[0] ?? "Unknown",
+    lastName: parts.slice(1).join(" ") || "Neighbour",
   };
 }
 
@@ -64,6 +67,7 @@ async function parseResponse(response: Response) {
 }
 
 export function AdminInboxReview({
+  onResolved,
   primaryActionLabel,
   selectedItem,
 }: InboxReviewProps) {
@@ -71,8 +75,14 @@ export function AdminInboxReview({
   const [state, setState] = useState<ReviewState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const payload = selectedItem.structuredPayload;
+  const [name, setName] = useState(
+    [asText(payload.firstName), asText(payload.lastName)]
+      .filter(Boolean)
+      .join(" ") || selectedItem.sender
+  );
   const [address, setAddress] = useState(selectedItem.address);
-  const [contact, setContact] = useState(selectedItem.contact);
+  const [phone, setPhone] = useState(selectedItem.contactPhone);
+  const [email, setEmail] = useState(selectedItem.contactEmail);
   const [needBy, setNeedBy] = useState(selectedItem.needBy);
   const [householdSize, setHouseholdSize] = useState(
     selectedItem.householdSize
@@ -101,21 +111,23 @@ export function AdminInboxReview({
 
   function requestPayload() {
     const [addressLine1, city] = address.split(",").map((part) => part.trim());
+    const parsedName = splitName(name);
 
     return {
       ...payload,
-      ...contactPatch(contact),
       addressLine1:
         addressLine1 || asText(payload.addressLine1, "Address pending"),
       allergenFlags: Array.isArray(payload.allergenFlags)
         ? payload.allergenFlags
         : [],
       coldChainRequired: asBoolean(payload.coldChainRequired),
+      contactEmail: email.trim() || undefined,
+      contactPhone: phone.trim() || undefined,
       dietaryTags: toTags(dietaryFlags),
       dueBucket: needBy,
-      firstName: asText(payload.firstName, "Unknown"),
+      firstName: parsedName.firstName,
       householdSize: Number.parseInt(householdSize, 10) || 1,
-      lastName: asText(payload.lastName, "Neighbour"),
+      lastName: parsedName.lastName,
       message: notes || "Notes pending review.",
       municipality: city || asText(payload.municipality, "Victoria"),
       requestedMealCount: asNumber(payload.requestedMealCount, 2),
@@ -126,18 +138,20 @@ export function AdminInboxReview({
     const [homeArea, homeMunicipality] = startArea
       .split(",")
       .map((part) => part.trim());
+    const parsedName = splitName(name);
 
     return {
       ...payload,
-      ...contactPatch(contact),
       canClimbStairs: canClimbStairs === "yes",
       canHandleColdChain: canBringCooler === "yes",
-      firstName: asText(payload.firstName, "Unknown"),
+      contactEmail: email.trim() || undefined,
+      contactPhone: phone.trim() || undefined,
+      firstName: parsedName.firstName,
       hasVehicleAccess: vehicleAccess === "yes",
       homeArea: homeArea || asText(payload.homeArea, "Victoria"),
       homeMunicipality:
         homeMunicipality || asText(payload.homeMunicipality, "Victoria"),
-      lastName: asText(payload.lastName, "Volunteer"),
+      lastName: parsedName.lastName,
       message: notes || "Volunteer notes pending review.",
       minutesAvailable: Number.parseInt(availability, 10) || 60,
       windowEnd,
@@ -185,11 +199,9 @@ export function AdminInboxReview({
           }
         )
       );
-      setState({
-        message: "The draft is approved for routing.",
-        status: "success",
-      });
+      onResolved?.(selectedItem.draftId);
       router.refresh();
+      return;
     } catch (error) {
       setState({
         message:
@@ -198,7 +210,6 @@ export function AdminInboxReview({
             : "The draft could not be approved.",
         status: "error",
       });
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -217,11 +228,9 @@ export function AdminInboxReview({
           method: "DELETE",
         })
       );
-      setState({
-        message: "The draft has been removed from the active queue.",
-        status: "success",
-      });
+      onResolved?.(selectedItem.draftId);
       router.refresh();
+      return;
     } catch (error) {
       setState({
         message:
@@ -230,7 +239,6 @@ export function AdminInboxReview({
             : "The draft could not be ignored.",
         status: "error",
       });
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -252,24 +260,45 @@ export function AdminInboxReview({
     <div className="grid gap-4">
       {selectedItem.draftType === "request" ? (
         <>
+          <Field label="Name" htmlFor="draft-name">
+            <Input
+              id="draft-name"
+              value={name}
+              leadingIcon="user-profile"
+              onChange={(event) => setName(event.target.value)}
+            />
+          </Field>
           <Field label="Address" htmlFor="draft-address">
             <Input
               id="draft-address"
               value={address}
+              leadingIcon="location-pin"
               onChange={(event) => setAddress(event.target.value)}
             />
           </Field>
-          <Field label="Contact" htmlFor="draft-contact">
-            <Input
-              id="draft-contact"
-              value={contact}
-              onChange={(event) => setContact(event.target.value)}
-            />
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Phone" htmlFor="draft-phone">
+              <Input
+                id="draft-phone"
+                value={phone}
+                leadingIcon="phone-handset"
+                onChange={(event) => setPhone(event.target.value)}
+              />
+            </Field>
+            <Field label="Email" htmlFor="draft-email">
+              <Input
+                id="draft-email"
+                value={email}
+                leadingIcon="chat-bubble"
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </Field>
+          </div>
           <Field label="Need by" htmlFor="need-by">
             <Select
               id="need-by"
               value={needBy}
+              leadingIcon="calendar"
               onChange={(event) => setNeedBy(event.target.value)}
             >
               <option value="today">today</option>
@@ -282,6 +311,7 @@ export function AdminInboxReview({
               id="household-size"
               value={householdSize}
               inputMode="numeric"
+              leadingIcon="group"
               onChange={(event) => setHouseholdSize(event.target.value)}
             />
           </Field>
@@ -296,17 +326,37 @@ export function AdminInboxReview({
         </>
       ) : selectedItem.draftType === "volunteer" ? (
         <>
-          <Field label="Contact" htmlFor="volunteer-contact">
+          <Field label="Name" htmlFor="volunteer-name">
             <Input
-              id="volunteer-contact"
-              value={contact}
-              onChange={(event) => setContact(event.target.value)}
+              id="volunteer-name"
+              value={name}
+              leadingIcon="user-profile"
+              onChange={(event) => setName(event.target.value)}
             />
           </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Phone" htmlFor="volunteer-phone">
+              <Input
+                id="volunteer-phone"
+                value={phone}
+                leadingIcon="phone-handset"
+                onChange={(event) => setPhone(event.target.value)}
+              />
+            </Field>
+            <Field label="Email" htmlFor="volunteer-email">
+              <Input
+                id="volunteer-email"
+                value={email}
+                leadingIcon="chat-bubble"
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </Field>
+          </div>
           <Field label="Availability" htmlFor="volunteer-availability">
             <Select
               id="volunteer-availability"
               value={availability}
+              leadingIcon="clock"
               onChange={(event) => setAvailability(event.target.value)}
             >
               <option value="30">30 minutes</option>
@@ -322,6 +372,7 @@ export function AdminInboxReview({
               <Input
                 id="volunteer-window-start"
                 value={windowStart}
+                leadingIcon="calendar"
                 onChange={(event) => setWindowStart(event.target.value)}
               />
             </Field>
@@ -329,6 +380,7 @@ export function AdminInboxReview({
               <Input
                 id="volunteer-window-end"
                 value={windowEnd}
+                leadingIcon="clock"
                 onChange={(event) => setWindowEnd(event.target.value)}
               />
             </Field>
@@ -337,6 +389,7 @@ export function AdminInboxReview({
             <Input
               id="volunteer-start-area"
               value={startArea}
+              leadingIcon="location-pin"
               onChange={(event) => setStartArea(event.target.value)}
             />
           </Field>
@@ -344,6 +397,7 @@ export function AdminInboxReview({
             <Select
               id="volunteer-vehicle-access"
               value={vehicleAccess}
+              leadingIcon="delivery-van"
               onChange={(event) => setVehicleAccess(event.target.value)}
             >
               <option value="yes">Yes</option>
@@ -354,6 +408,7 @@ export function AdminInboxReview({
             <Select
               id="volunteer-cooler"
               value={canBringCooler}
+              leadingIcon="snowflake"
               onChange={(event) => setCanBringCooler(event.target.value)}
             >
               <option value="yes">Yes</option>
@@ -364,6 +419,7 @@ export function AdminInboxReview({
             <Select
               id="volunteer-stairs"
               value={canClimbStairs}
+              leadingIcon="door"
               onChange={(event) => setCanClimbStairs(event.target.value)}
             >
               <option value="yes">Comfortable</option>

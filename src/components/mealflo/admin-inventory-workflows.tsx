@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/mealflo/badge";
@@ -19,10 +19,13 @@ import {
   type ParsedInventoryDraft,
   type ParsedInventoryDraftItem,
 } from "@/lib/inventory";
+import { cn } from "@/lib/utils";
 
 type AdminInventoryWorkflowsProps = {
+  allergenFlagOptions: string[];
   defaultReceiptText: string;
   defaultSourceNote: string;
+  dietaryTagOptions: string[];
 };
 
 type ApiResponse<T> = {
@@ -48,6 +51,95 @@ function splitTags(value: string) {
 
 function labelForOption(value: string) {
   return formatInventoryLabel(value);
+}
+
+function appendTagValue(currentValue: string, option: string) {
+  const currentTags = splitTags(currentValue);
+
+  if (currentTags.includes(option)) {
+    return currentTags.map(labelForOption).join(", ");
+  }
+
+  return [...currentTags, option].map(labelForOption).join(", ");
+}
+
+type TagSuggestionFieldProps = {
+  hint: string;
+  id: string;
+  label: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder: string;
+  value: string;
+};
+
+function TagSuggestionField({
+  hint,
+  id,
+  label,
+  onChange,
+  options,
+  placeholder,
+  value,
+}: TagSuggestionFieldProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedTags = splitTags(value);
+  const activeTerm = value.split(",").at(-1)?.trim().toLowerCase() ?? "";
+  const suggestions = options
+    .filter((option) => !selectedTags.includes(option))
+    .filter((option) => {
+      if (!activeTerm) {
+        return true;
+      }
+
+      const displayLabel = labelForOption(option).toLowerCase();
+
+      return displayLabel.includes(activeTerm) || option.includes(activeTerm);
+    })
+    .slice(0, 6);
+
+  return (
+    <Field hint={hint} label={label} htmlFor={id}>
+      <div className="relative">
+        <Input
+          id={id}
+          value={value}
+          autoComplete="off"
+          placeholder={placeholder}
+          onBlur={() => {
+            window.setTimeout(() => setIsOpen(false), 120);
+          }}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+        />
+        {isOpen && suggestions.length > 0 ? (
+          <div className="border-line absolute right-0 left-0 z-20 mt-2 grid gap-1 rounded-[12px] border-[1.5px] bg-white p-2">
+            {suggestions.map((option) => (
+              <button
+                key={option}
+                className="hover:bg-surface-tint focus-visible:outline-action rounded-[8px] px-3 py-2 text-left text-sm font-medium transition-[background-color] duration-[var(--mf-duration-base)]"
+                style={{
+                  WebkitTextFillColor: "var(--mf-color-ink)",
+                  color: "var(--mf-color-ink)",
+                }}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onChange(appendTagValue(value, option));
+                  setIsOpen(false);
+                }}
+              >
+                {labelForOption(option)}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </Field>
+  );
 }
 
 function parsePerishabilityValue(value: string) {
@@ -88,29 +180,33 @@ function itemPayload(
 }
 
 export function AdminInventoryWorkflows({
+  allergenFlagOptions,
   defaultReceiptText,
   defaultSourceNote,
+  dietaryTagOptions,
 }: AdminInventoryWorkflowsProps) {
   const router = useRouter();
   const [entryType, setEntryType] = useState<InventoryEntryType>("meal");
   const [name, setName] = useState("");
-  const [quantity, setQuantity] = useState("12");
-  const [unit, setUnit] = useState("tray");
-  const [category, setCategory] = useState<MealCategory>("hot_meal");
-  const [sourceType, setSourceType] =
-    useState<IngredientSourceType>("purchase");
-  const [sourceNote, setSourceNote] = useState(defaultSourceNote);
+  const [quantity, setQuantity] = useState("");
+  const [unit, setUnit] = useState("");
+  const [category, setCategory] = useState<MealCategory | "">("");
+  const [sourceType, setSourceType] = useState<IngredientSourceType | "">("");
+  const [manualSourceNote, setManualSourceNote] = useState("");
   const [dietaryTags, setDietaryTags] = useState("");
   const [allergenFlags, setAllergenFlags] = useState("");
   const [notes, setNotes] = useState("");
   const [refrigerated, setRefrigerated] = useState(false);
-  const [manualStatus, setManualStatus] = useState("Ready to save.");
+  const [manualStatus, setManualStatus] = useState("");
   const [isSavingManual, setIsSavingManual] = useState(false);
-  const [receiptText, setReceiptText] = useState(defaultReceiptText);
-  const [documentName, setDocumentName] = useState("Community pantry receipt");
+  const [receiptText, setReceiptText] = useState("");
+  const [documentName, setDocumentName] = useState("");
+  const [receiptSourceNote, setReceiptSourceNote] = useState("");
+  const [receiptImageName, setReceiptImageName] = useState("");
   const [draft, setDraft] = useState<ParsedInventoryDraft | null>(null);
+  const [draftModalOpen, setDraftModalOpen] = useState(false);
   const [parseStatus, setParseStatus] = useState(
-    "Paste a receipt or use the sample below."
+    "Upload, paste, or use the sample receipt."
   );
   const [isParsing, setIsParsing] = useState(false);
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
@@ -122,12 +218,35 @@ export function AdminInventoryWorkflows({
     () => suggestPerishability({ name, refrigerated }),
     [name, refrigerated]
   );
-  const [perishabilityValue, setPerishabilityValue] = useState(
-    `${suggestion.score}|${suggestion.label}`
-  );
+  const [perishabilityValue, setPerishabilityValue] = useState("");
+  const canSaveManual =
+    name.trim().length >= 2 &&
+    Number.parseInt(quantity, 10) > 0 &&
+    unit.trim().length > 0;
+  const canParseReceipt = receiptText.trim().length >= 4;
+
+  useEffect(() => {
+    if (!draftModalOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDraftModalOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [draftModalOpen]);
 
   const saveManualEntry = async () => {
-    const selectedPerishability = parsePerishabilityValue(perishabilityValue);
+    const selectedPerishability = perishabilityValue
+      ? parsePerishabilityValue(perishabilityValue)
+      : null;
 
     setIsSavingManual(true);
     setManualStatus("Saving inventory entry.");
@@ -136,23 +255,24 @@ export function AdminInventoryWorkflows({
       const response = await fetch("/api/inventory/manual", {
         body: JSON.stringify({
           allergenFlags: splitTags(allergenFlags),
-          category: entryType === "meal" ? category : undefined,
+          category: entryType === "meal" && category ? category : undefined,
           dietaryTags: splitTags(dietaryTags),
           entryType,
           name,
           notes: notes || undefined,
           perishabilityLabel:
-            entryType === "ingredient"
+            entryType === "ingredient" && selectedPerishability
               ? selectedPerishability.label
               : undefined,
           perishabilityScore:
-            entryType === "ingredient"
+            entryType === "ingredient" && selectedPerishability
               ? selectedPerishability.score
               : undefined,
           quantity: Number.parseInt(quantity, 10),
           refrigerated,
-          sourceReference: sourceNote,
-          sourceType: entryType === "ingredient" ? sourceType : undefined,
+          sourceReference: manualSourceNote || undefined,
+          sourceType:
+            entryType === "ingredient" && sourceType ? sourceType : undefined,
           unit,
         }),
         headers: { "Content-Type": "application/json" },
@@ -185,9 +305,9 @@ export function AdminInventoryWorkflows({
     try {
       const response = await fetch("/api/inventory/parse", {
         body: JSON.stringify({
-          documentName,
+          documentName: documentName || undefined,
           rawText: receiptText,
-          sourceNote,
+          sourceNote: receiptSourceNote || undefined,
         }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -200,8 +320,10 @@ export function AdminInventoryWorkflows({
       }
 
       setDraft(payload.data);
+      setDraftModalOpen(true);
       setParseStatus(`${payload.data.items.length} draft items ready.`);
     } catch (error) {
+      setDraftModalOpen(false);
       setParseStatus(
         error instanceof Error ? error.message : "Receipt parsing failed."
       );
@@ -216,7 +338,7 @@ export function AdminInventoryWorkflows({
 
     try {
       const response = await fetch("/api/inventory/manual", {
-        body: JSON.stringify(itemPayload(item, sourceNote)),
+        body: JSON.stringify(itemPayload(item, receiptSourceNote)),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -253,45 +375,39 @@ export function AdminInventoryWorkflows({
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <section className="space-y-3">
+    <div className="grid items-stretch gap-4 xl:grid-cols-2">
+      <section className="flex min-h-0 flex-col gap-3">
         <CardHeader
           title="Manual entry"
           note="Add route-ready meals or ingredient stock without mixing the two layers."
-          action={
-            <Badge
-              tone={entryType === "meal" ? "success" : "info"}
-              leading={
-                <MealfloIcon
-                  name={entryType === "meal" ? "meal-container" : "fridge"}
-                  size={18}
-                />
-              }
-            >
-              {entryType === "meal" ? "Deliverable meal" : "Ingredient"}
-            </Badge>
-          }
         />
 
-        <div className="border-line space-y-5 rounded-[16px] border-[1.5px] bg-white p-5 sm:p-6">
-          <div className="flex flex-wrap gap-2" aria-label="Inventory type">
+        <div className="border-line flex flex-1 flex-col gap-5 rounded-[16px] border-[1.5px] bg-white p-5 sm:p-6">
+          <div className="grid grid-cols-2 gap-2" aria-label="Inventory type">
             {(["meal", "ingredient"] as const).map((type) => (
-              <Button
+              <button
                 key={type}
-                variant={entryType === type ? "primary" : "secondary"}
-                leading={
-                  <MealfloIcon
-                    name={type === "meal" ? "meal-container" : "fridge"}
-                    size={20}
-                  />
-                }
-                onClick={() => {
-                  setEntryType(type);
-                  setUnit(type === "meal" ? "tray" : "bag");
+                type="button"
+                aria-pressed={entryType === type}
+                className={cn(
+                  "border-line text-ink hover:border-line-strong inline-flex min-h-[52px] items-center justify-center gap-2 rounded-[12px] border-[1.5px] bg-white px-4 text-base font-semibold transition-[transform,background-color,border-color,color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)] active:scale-[0.97]",
+                  entryType === type &&
+                    "text-info-text border-[rgba(120,144,250,0.5)] bg-[var(--mf-color-blue-50)]"
+                )}
+                style={{
+                  color:
+                    entryType === type
+                      ? "var(--mf-color-info-text)"
+                      : "var(--mf-color-ink)",
                 }}
+                onClick={() => setEntryType(type)}
               >
-                {type === "meal" ? "Meal item" : "Ingredient"}
-              </Button>
+                <MealfloIcon
+                  name={type === "meal" ? "meal-container" : "fridge"}
+                  size={20}
+                />
+                <span>{type === "meal" ? "Meal item" : "Ingredient"}</span>
+              </button>
             ))}
           </div>
 
@@ -314,6 +430,7 @@ export function AdminInventoryWorkflows({
                   id="inventory-quantity"
                   inputMode="numeric"
                   min={1}
+                  placeholder="12"
                   type="number"
                   value={quantity}
                   onChange={(event) => setQuantity(event.target.value)}
@@ -322,6 +439,7 @@ export function AdminInventoryWorkflows({
               <Field label="Unit" htmlFor="inventory-unit" required>
                 <Input
                   id="inventory-unit"
+                  placeholder={entryType === "meal" ? "tray" : "bag"}
                   value={unit}
                   onChange={(event) => setUnit(event.target.value)}
                 />
@@ -336,9 +454,10 @@ export function AdminInventoryWorkflows({
                   id="inventory-category"
                   value={category}
                   onChange={(event) =>
-                    setCategory(event.target.value as MealCategory)
+                    setCategory(event.target.value as MealCategory | "")
                   }
                 >
+                  <option value="">Choose category</option>
                   {mealCategories.map((option) => (
                     <option key={option} value={option}>
                       {labelForOption(option)}
@@ -352,9 +471,12 @@ export function AdminInventoryWorkflows({
                   id="inventory-source-type"
                   value={sourceType}
                   onChange={(event) =>
-                    setSourceType(event.target.value as IngredientSourceType)
+                    setSourceType(
+                      event.target.value as IngredientSourceType | ""
+                    )
                   }
                 >
+                  <option value="">Choose source</option>
                   {ingredientSourceTypes.map((option) => (
                     <option key={option} value={option}>
                       {labelForOption(option)}
@@ -367,8 +489,9 @@ export function AdminInventoryWorkflows({
             <Field label="Source note" htmlFor="inventory-source-note">
               <Input
                 id="inventory-source-note"
-                value={sourceNote}
-                onChange={(event) => setSourceNote(event.target.value)}
+                placeholder="Thursday produce order"
+                value={manualSourceNote}
+                onChange={(event) => setManualSourceNote(event.target.value)}
               />
             </Field>
           </div>
@@ -414,6 +537,7 @@ export function AdminInventoryWorkflows({
                     setPerishabilityValue(event.target.value)
                   }
                 >
+                  <option value="">Choose perishability</option>
                   {perishabilityOptions.map((option) => (
                     <option
                       key={`${option.score}-${option.label}`}
@@ -429,47 +553,45 @@ export function AdminInventoryWorkflows({
 
           {entryType === "meal" ? (
             <div className="grid gap-4 md:grid-cols-2">
-              <Field
+              <TagSuggestionField
                 hint="Comma-separated tags, for example low sodium, vegetarian."
+                id="dietary-tags"
                 label="Dietary tags"
-                htmlFor="dietary-tags"
-              >
-                <Input
-                  id="dietary-tags"
-                  value={dietaryTags}
-                  onChange={(event) => setDietaryTags(event.target.value)}
-                />
-              </Field>
-              <Field
+                options={dietaryTagOptions}
+                placeholder="low sodium, vegetarian"
+                value={dietaryTags}
+                onChange={setDietaryTags}
+              />
+              <TagSuggestionField
                 hint="Comma-separated blockers, for example peanut, dairy."
+                id="allergen-flags"
                 label="Allergen flags"
-                htmlFor="allergen-flags"
-              >
-                <Input
-                  id="allergen-flags"
-                  value={allergenFlags}
-                  onChange={(event) => setAllergenFlags(event.target.value)}
-                />
-              </Field>
+                options={allergenFlagOptions}
+                placeholder="peanut, dairy"
+                value={allergenFlags}
+                onChange={setAllergenFlags}
+              />
             </div>
           ) : null}
 
           <Field label="Coordinator notes" htmlFor="inventory-notes">
             <Textarea
               id="inventory-notes"
+              placeholder="Add handling notes for coordinators."
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
             />
           </Field>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p role="status" className="text-muted text-sm leading-6">
-              {manualStatus}
-            </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            {manualStatus ? (
+              <p role="status" className="text-muted text-sm leading-6">
+                {manualStatus}
+              </p>
+            ) : null}
             <Button
-              disabled={isSavingManual || name.trim().length < 2}
+              disabled={isSavingManual || !canSaveManual}
               variant="primary"
-              leading={<MealfloIcon name="plus" size={20} />}
               onClick={saveManualEntry}
             >
               {isSavingManual ? "Saving" : "Save item"}
@@ -478,18 +600,18 @@ export function AdminInventoryWorkflows({
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section className="flex min-h-0 flex-col gap-3">
         <CardHeader
           title="Receipt draft"
           note="Review meal and ingredient lines before they change inventory."
-          action={<Badge tone="info">Manual approval</Badge>}
         />
 
-        <div className="border-line space-y-5 rounded-[16px] border-[1.5px] bg-white p-5 sm:p-6">
+        <div className="border-line flex flex-1 flex-col gap-5 rounded-[16px] border-[1.5px] bg-white p-5 sm:p-6">
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Document name" htmlFor="receipt-document-name">
               <Input
                 id="receipt-document-name"
+                placeholder="Community pantry receipt"
                 value={documentName}
                 onChange={(event) => setDocumentName(event.target.value)}
               />
@@ -497,15 +619,49 @@ export function AdminInventoryWorkflows({
             <Field label="Receipt source" htmlFor="receipt-source-note">
               <Input
                 id="receipt-source-note"
-                value={sourceNote}
-                onChange={(event) => setSourceNote(event.target.value)}
+                placeholder="Thursday produce order"
+                value={receiptSourceNote}
+                onChange={(event) => setReceiptSourceNote(event.target.value)}
               />
             </Field>
           </div>
 
-          <Field label="Receipt text" htmlFor="receipt-text">
+          <Field
+            hint="Upload a receipt photo from phone or desktop."
+            label="Receipt image"
+            htmlFor="receipt-image"
+          >
+            <input
+              id="receipt-image"
+              accept="image/*"
+              className="mealflo-field-control border-line file:border-line file:bg-surface-tint file:text-ink hover:border-line-strong min-h-[52px] w-full rounded-[12px] border-[1.5px] bg-white px-4 py-3 text-base text-black file:mr-4 file:rounded-[10px] file:border-[1.5px] file:px-3 file:py-2 file:text-sm file:font-semibold focus:border-[rgba(120,144,250,0.45)]"
+              type="file"
+              onChange={(event) => {
+                const fileName = event.target.files?.[0]?.name ?? "";
+                setReceiptImageName(fileName);
+                setParseStatus(
+                  fileName
+                    ? `${fileName} attached. Add receipt text or use the sample receipt to parse.`
+                    : "Upload, paste, or use the sample receipt."
+                );
+              }}
+            />
+            {receiptImageName ? (
+              <span className="text-muted text-sm leading-6">
+                {receiptImageName}
+              </span>
+            ) : null}
+          </Field>
+
+          <Field
+            className="flex min-h-[260px] flex-1 flex-col"
+            label="Receipt text"
+            htmlFor="receipt-text"
+          >
             <Textarea
               id="receipt-text"
+              className="min-h-[220px] flex-1 resize-none"
+              placeholder="Paste receipt lines, for example 24 yogurt cups, 18 spinach bags."
               value={receiptText}
               onChange={(event) => setReceiptText(event.target.value)}
             />
@@ -518,119 +674,165 @@ export function AdminInventoryWorkflows({
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="secondary"
-                onClick={() => setReceiptText(defaultReceiptText)}
+                onClick={() => {
+                  setDocumentName("Community pantry receipt");
+                  setReceiptSourceNote(defaultSourceNote);
+                  setReceiptText(defaultReceiptText);
+                  setParseStatus("Sample receipt ready to parse.");
+                }}
               >
                 Use sample receipt
               </Button>
               <Button
-                disabled={isParsing}
+                disabled={isParsing || !canParseReceipt}
                 variant="primary"
-                leading={<MealfloIcon name="magnifying-glass" size={20} />}
                 onClick={parseReceipt}
               >
                 {isParsing ? "Parsing" : "Parse receipt"}
               </Button>
             </div>
           </div>
+        </div>
+      </section>
 
-          {draft ? (
-            <div className="space-y-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap gap-2">
-                  <Badge tone="neutral">{draft.items.length} items</Badge>
-                </div>
+      {draft && draftModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex animate-[mfModalBackdropIn_180ms_var(--mf-ease-out)] items-center justify-center bg-[rgba(28,28,46,0.34)] px-3 py-4 backdrop-blur-[2px] sm:px-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inventory-draft-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setDraftModalOpen(false);
+            }
+          }}
+        >
+          <div className="border-line max-h-[calc(100vh-2rem)] w-full max-w-[920px] animate-[mfModalPanelIn_260ms_var(--mf-ease-spring)] overflow-hidden rounded-[22px] border-[1.5px] bg-white shadow-[var(--mf-shadow-elevated)]">
+            <div className="border-line flex items-start justify-between gap-4 border-b bg-[var(--mf-color-neutral-50)] px-5 py-4 sm:px-6">
+              <div className="min-w-0">
+                <p className="text-muted text-sm font-medium">
+                  {documentName || "Receipt draft"}
+                </p>
+                <h3
+                  id="inventory-draft-title"
+                  className="font-display text-ink mt-1 text-[30px] font-semibold tracking-[-0.02em]"
+                >
+                  Review {draft.items.length} parsed items
+                </h3>
+              </div>
+              <Button
+                type="button"
+                iconOnly
+                aria-label="Close receipt draft"
+                className="min-h-[48px] border-transparent bg-transparent p-0 text-[var(--mf-color-muted)] hover:-translate-y-0.5 hover:border-transparent hover:bg-transparent hover:text-[var(--mf-color-ink)]"
+                onClick={() => setDraftModalOpen(false)}
+              >
+                <MealfloIcon name="close-x" size={28} />
+              </Button>
+            </div>
+
+            <div className="max-h-[calc(100vh-12rem)] overflow-y-auto px-5 py-2 sm:px-6">
+              {draft.items.map((item, index) => {
+                const key = `${item.line}-${index}`;
+                const confirmed = confirmedKeys.has(key);
+
+                return (
+                  <div
+                    key={key}
+                    className="border-line grid gap-4 border-t-[1.5px] py-4 first:border-t-0 md:grid-cols-[minmax(0,1fr)_auto]"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-start gap-2">
+                        <Badge
+                          tone={item.entryType === "meal" ? "success" : "info"}
+                          leading={
+                            <MealfloIcon
+                              name={
+                                item.entryType === "meal"
+                                  ? "meal-container"
+                                  : "fridge"
+                              }
+                              size={18}
+                            />
+                          }
+                        >
+                          {item.entryType === "meal" ? "Meal" : "Ingredient"}
+                        </Badge>
+                        <Badge tone={item.refrigerated ? "info" : "neutral"}>
+                          {item.refrigerated
+                            ? "Needs refrigeration"
+                            : "Shelf stable"}
+                        </Badge>
+                        {item.entryType === "ingredient" ? (
+                          <Badge tone="warning">
+                            {item.perishability.label}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-ink text-[17px] font-semibold">
+                          {item.name}
+                        </p>
+                        <p className="text-muted text-sm leading-6">
+                          {item.quantity} {item.unit}
+                          {item.category
+                            ? `, ${labelForOption(item.category)}`
+                            : ""}
+                        </p>
+                        <p className="text-muted text-sm leading-6">
+                          Source line: {item.line}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      disabled={confirmed || confirmingKey === key}
+                      size="sm"
+                      variant={confirmed ? "secondary" : "primary"}
+                      leading={
+                        <MealfloIcon
+                          name={confirmed ? "checkmark-circle" : "plus"}
+                          size={18}
+                        />
+                      }
+                      onClick={() => confirmItem(item, key)}
+                    >
+                      {confirmed
+                        ? "Confirmed"
+                        : confirmingKey === key
+                          ? "Saving"
+                          : "Confirm"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="border-line flex flex-col gap-3 border-t bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <p role="status" className="text-muted text-sm leading-6">
+                {parseStatus}
+              </p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  variant="quiet"
+                  onClick={() => setDraftModalOpen(false)}
+                >
+                  Close
+                </Button>
                 <Button
                   disabled={
                     draft.items.length === 0 ||
                     confirmedKeys.size === draft.items.length
                   }
-                  size="sm"
-                  variant="secondary"
+                  variant="primary"
                   onClick={confirmAll}
                 >
                   Confirm all
                 </Button>
               </div>
-
-              <div className="grid gap-3">
-                {draft.items.map((item, index) => {
-                  const key = `${item.line}-${index}`;
-                  const confirmed = confirmedKeys.has(key);
-
-                  return (
-                    <div
-                      key={key}
-                      className="border-line grid gap-4 border-t-[1.5px] py-4 first:border-t-0 first:pt-0 md:grid-cols-[minmax(0,1fr)_auto]"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-start gap-2">
-                          <Badge
-                            tone={
-                              item.entryType === "meal" ? "success" : "info"
-                            }
-                            leading={
-                              <MealfloIcon
-                                name={
-                                  item.entryType === "meal"
-                                    ? "meal-container"
-                                    : "fridge"
-                                }
-                                size={18}
-                              />
-                            }
-                          >
-                            {item.entryType === "meal" ? "Meal" : "Ingredient"}
-                          </Badge>
-                          <Badge tone={item.refrigerated ? "info" : "neutral"}>
-                            {item.refrigerated
-                              ? "Needs refrigeration"
-                              : "Shelf stable"}
-                          </Badge>
-                          {item.entryType === "ingredient" ? (
-                            <Badge tone="warning">
-                              {item.perishability.label}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-ink font-medium">{item.name}</p>
-                          <p className="text-muted text-sm leading-6">
-                            {item.quantity} {item.unit}
-                            {item.category
-                              ? `, ${labelForOption(item.category)}`
-                              : ""}
-                          </p>
-                          <p className="text-muted text-sm leading-6">
-                            Source line: {item.line}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        disabled={confirmed || confirmingKey === key}
-                        size="sm"
-                        variant={confirmed ? "secondary" : "primary"}
-                        leading={
-                          <MealfloIcon
-                            name={confirmed ? "checkmark-circle" : "plus"}
-                            size={18}
-                          />
-                        }
-                        onClick={() => confirmItem(item, key)}
-                      >
-                        {confirmed
-                          ? "Confirmed"
-                          : confirmingKey === key
-                            ? "Saving"
-                            : "Confirm"}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
-          ) : null}
+          </div>
         </div>
-      </section>
+      ) : null}
     </div>
   );
 }

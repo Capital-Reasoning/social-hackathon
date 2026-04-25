@@ -31,4 +31,14 @@ describe("env parsing", () => {
       openAiIntakeModel: "gpt-5.4-mini",
     });
   });
+
+  it("uses an inbox query that catches delivered and sent alias messages", () => {
+    expect(
+      parseServerEnv({
+        GMAIL_INGEST_TO_ADDRESS: "info+mealflo@capitalreasoning.com",
+      }).gmailIngestQuery
+    ).toBe(
+      "{deliveredto:info+mealflo@capitalreasoning.com to:info+mealflo@capitalreasoning.com} newer_than:30d"
+    );
+  });
 });

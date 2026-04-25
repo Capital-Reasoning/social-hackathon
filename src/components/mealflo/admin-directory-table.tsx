@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 
-import { Badge } from "@/components/mealflo/badge";
 import {
   Table,
   TableBody,
@@ -15,49 +14,42 @@ import type { AdminDirectoryRow } from "@/server/mealflo/backend";
 import { cn } from "@/lib/utils";
 
 type DirectoryFilter = "clients" | "drivers";
-type DirectorySubfilter = "all" | "active" | "attention";
 
 const filters: Array<{ key: DirectoryFilter; label: string }> = [
   { key: "clients", label: "Clients" },
   { key: "drivers", label: "Drivers" },
 ];
 
-const subfilters: Array<{ key: DirectorySubfilter; label: string }> = [
-  { key: "all", label: "All" },
-  { key: "active", label: "Active" },
-  { key: "attention", label: "Needs attention" },
-];
-
-function rowMatchesSubfilter(
-  row: AdminDirectoryRow,
-  filter: DirectorySubfilter
-) {
-  if (filter === "all") {
-    return true;
+function DriverAvailability({ row }: { row: AdminDirectoryRow }) {
+  if (!row.availabilityDays || !row.availabilityWindow) {
+    return <span className="text-muted">{row.measure}</span>;
   }
 
-  if (filter === "active") {
-    return /active|available|assigned|delivered/i.test(row.status);
-  }
-
-  if (filter === "attention") {
-    return /held|todo|low|inactive|review/i.test(row.status);
-  }
-
-  return true;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="border-line text-ink inline-flex min-h-[30px] items-center rounded-full border-[1.5px] bg-white px-3 text-xs font-semibold">
+        {row.availabilityDays}
+      </span>
+      <span className="text-info-text inline-flex min-h-[30px] items-center rounded-full border-[1.5px] border-[rgba(120,144,250,0.28)] bg-[var(--mf-color-blue-50)] px-3 text-xs font-semibold">
+        {row.availabilityWindow}
+      </span>
+      {row.availabilityDuration ? (
+        <span className="text-muted basis-full text-sm leading-5">
+          {row.availabilityDuration}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 export function AdminDirectoryTable({ rows }: { rows: AdminDirectoryRow[] }) {
   const [filter, setFilter] = useState<DirectoryFilter>("clients");
-  const [subfilter, setSubfilter] = useState<DirectorySubfilter>("all");
   const visibleRows = useMemo(
     () =>
-      rows
-        .filter(
-          (row) => row.role === (filter === "clients" ? "client" : "driver")
-        )
-        .filter((row) => rowMatchesSubfilter(row, subfilter)),
-    [filter, rows, subfilter]
+      rows.filter(
+        (row) => row.role === (filter === "clients" ? "client" : "driver")
+      ),
+    [filter, rows]
   );
   const visibleNoun = filter === "clients" ? "clients" : "drivers";
 
@@ -92,73 +84,45 @@ export function AdminDirectoryTable({ rows }: { rows: AdminDirectoryRow[] }) {
         })}
       </div>
 
-      <div
-        className="flex flex-wrap gap-2"
-        aria-label={`${visibleNoun} filters`}
-      >
-        {subfilters.map((item) => {
-          const active = item.key === subfilter;
-
-          return (
-            <button
-              key={item.key}
-              type="button"
-              aria-pressed={active}
-              className={cn(
-                "min-h-[38px] rounded-full border-[1.5px] px-3 text-sm font-medium transition-[transform,background-color,border-color,color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)]",
-                active
-                  ? "border-[rgba(120,144,250,0.38)] bg-[var(--mf-color-blue-50)]"
-                  : "border-line hover:border-line-strong bg-white"
-              )}
-              style={{
-                color: active
-                  ? "var(--mf-color-info-text)"
-                  : "var(--mf-color-muted)",
-              }}
-              onClick={() => setSubfilter(item.key)}
-            >
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <Table className="w-full min-w-[820px]">
+      <Table className="w-full min-w-[820px] table-fixed">
+        <colgroup>
+          <col className="w-[20%]" />
+          <col className={filter === "clients" ? "w-[32%]" : "w-[27%]"} />
+          <col className={filter === "clients" ? "w-[17%]" : "w-[25%]"} />
+          <col className={filter === "clients" ? "w-[31%]" : "w-[28%]"} />
+        </colgroup>
         <TableHead>
           <TableRow>
-            <TableHeaderCell className="w-[20%] py-2.5">Name</TableHeaderCell>
-            <TableHeaderCell className="w-[14%] py-2.5">Status</TableHeaderCell>
-            <TableHeaderCell className="w-[27%] py-2.5">
+            <TableHeaderCell className="py-2.5">Name</TableHeaderCell>
+            <TableHeaderCell className="py-2.5">
               {filter === "clients" ? "Address" : "Start area"}
             </TableHeaderCell>
-            <TableHeaderCell className="w-[17%] py-2.5">
+            <TableHeaderCell className="py-2.5">
               {filter === "clients" ? "Meal count" : "Availability"}
             </TableHeaderCell>
-            <TableHeaderCell className="w-[22%] py-2.5">Notes</TableHeaderCell>
+            <TableHeaderCell className="py-2.5">Notes</TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {visibleRows.map((row) => (
             <TableRow key={row.id}>
               <TableCell className="py-3">
-                <p className="text-ink font-semibold">{row.name}</p>
+                <p className="text-ink truncate font-semibold">{row.name}</p>
+              </TableCell>
+              <TableCell className="text-muted py-3">
+                <span className="line-clamp-2">{row.location}</span>
               </TableCell>
               <TableCell className="py-3">
-                <Badge
-                  size="sm"
-                  tone={
-                    /held|todo|inactive|review/i.test(row.status)
-                      ? "warning"
-                      : "info"
-                  }
-                >
-                  {row.status}
-                </Badge>
+                {filter === "drivers" ? (
+                  <DriverAvailability row={row} />
+                ) : (
+                  <span className="text-muted">{row.measure}</span>
+                )}
               </TableCell>
-              <TableCell className="text-muted py-3">{row.location}</TableCell>
-              <TableCell className="text-muted py-3">{row.measure}</TableCell>
               <TableCell className="text-muted py-3">
-                {row.notes || "No special notes"}
+                <span className="line-clamp-2">
+                  {row.notes || "No special notes"}
+                </span>
               </TableCell>
             </TableRow>
           ))}

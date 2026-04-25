@@ -4,21 +4,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button, ButtonLink } from "@/components/mealflo/button";
 import { Card } from "@/components/mealflo/card";
+import { getDirectionProgress } from "@/components/mealflo/driver-navigation";
 import { IconSwatch, MealfloIcon } from "@/components/mealflo/icon";
+import { MapCanvas } from "@/components/mealflo/map-canvas";
 import {
   demoDriverControlEvent,
   demoDriverStatusEvent,
   demoDriverStatusRequestEvent,
   type DemoDriverControlAction,
 } from "@/lib/demo";
-import { MapCanvas } from "@/components/mealflo/map-canvas";
+import { cn } from "@/lib/utils";
 import type {
   DriverOfferData,
   DriverRouteDirection,
   DriverRouteOption,
   DriverRouteStop,
 } from "@/server/mealflo/backend";
-import { cn } from "@/lib/utils";
 
 type DriverMobileFlowProps = {
   data: DriverOfferData;
@@ -63,7 +64,7 @@ const driveAnimationTuning = {
   cameraMoveDurationMs: 180,
   maxDurationMs: 90_000,
   minDurationMs: 10_000,
-  targetSpeedKmh: 100,
+  targetSpeedKmh: 200,
 };
 function formatAvailabilityLabel(minutes: number) {
   if (minutes === 60) {
@@ -260,43 +261,6 @@ function formatMapDistanceMeters(value: number) {
   }
 
   return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)} km`;
-}
-
-function getDirectionProgress(
-  segmentDirections: DriverRouteOption["routeDirections"],
-  distanceAlongLine: number
-) {
-  if (segmentDirections.length === 0) {
-    return {
-      remainingMeters: null,
-      stepIndex: 0,
-    };
-  }
-
-  let walked = 0;
-
-  for (let index = 0; index < segmentDirections.length; index += 1) {
-    const direction = segmentDirections[index]!;
-    const stepDistance = Math.max(direction.distanceMeters, 0);
-    const nextWalked = walked + stepDistance;
-
-    if (
-      distanceAlongLine <= nextWalked ||
-      index === segmentDirections.length - 1
-    ) {
-      return {
-        remainingMeters: Math.max(nextWalked - distanceAlongLine, 0),
-        stepIndex: index,
-      };
-    }
-
-    walked = nextWalked;
-  }
-
-  return {
-    remainingMeters: 0,
-    stepIndex: segmentDirections.length - 1,
-  };
 }
 
 function getDirectionGlyphKind(instruction: string): DirectionGlyphKind {
@@ -659,44 +623,46 @@ function MetricStrip({
   route: DriverRouteOption;
   showRemaining?: boolean;
 }) {
-  const items = [
+  const details = [
     {
-      label: "Stops",
+      label: route.stopCount === 1 ? "stop" : "stops",
       value: String(route.stopCount),
     },
     {
-      label: "Drive",
+      label: "drive",
       value: route.driveTime,
-    },
-    {
-      label: "Total",
-      value: route.totalPlannedTime,
     },
     showRemaining
       ? {
-          label: "Left",
+          label: "left",
           value: String(remainingCount),
         }
       : null,
   ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   return (
-    <div
-      className={cn(
-        "grid divide-x divide-[rgba(24,24,60,0.18)] rounded-[16px] border-[1.5px] border-[rgba(24,24,60,0.24)] bg-[rgba(255,253,240,0.68)]",
-        showRemaining ? "grid-cols-4" : "grid-cols-3"
-      )}
-    >
-      {items.map((item) => (
-        <div key={item.label} className="px-2 py-3 text-center">
-          <p className="font-display text-ink text-[23px] leading-none font-semibold tracking-[-0.02em]">
-            {item.value}
-          </p>
-          <p className="text-muted mt-1 text-[12px] font-medium">
-            {item.label}
+    <div className="rounded-[16px] border-[1.5px] border-[rgba(24,24,60,0.18)] bg-[rgba(255,253,240,0.68)] px-4 py-3">
+      <div className="flex items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-muted text-[12px] font-medium">Total route</p>
+          <p className="font-display text-ink mt-1 text-[31px] leading-none font-semibold tracking-[-0.03em]">
+            {route.totalPlannedTime}
           </p>
         </div>
-      ))}
+        <div className="grid shrink-0 gap-1.5 text-right">
+          {details.map((item) => (
+            <p
+              key={item.label}
+              className="text-muted text-[13px] leading-tight font-medium"
+            >
+              <span className="font-display text-ink text-[18px] font-semibold tracking-[-0.02em] whitespace-nowrap">
+                {item.value}
+              </span>{" "}
+              {item.label}
+            </p>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

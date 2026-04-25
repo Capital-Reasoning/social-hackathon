@@ -26,6 +26,7 @@ import {
   type TriageBucket,
   type TriageRequestCard,
 } from "@/server/mealflo/backend";
+import { syncConfiguredGmailForAdminInbox } from "@/server/mealflo/gmail-ingest";
 
 import { MealfloIcon, type IconName } from "@/components/mealflo/icon";
 
@@ -112,6 +113,7 @@ function todayDeliveryMarkers(
   driverMarkers: readonly LiveMarker[]
 ): LiveMarker[] {
   const requestMarkers = requests.map((request) => ({
+    description: request.address,
     id: `today-${request.id}`,
     label: request.clientName,
     latitude: request.latitude,
@@ -165,17 +167,15 @@ function AdminTopBar({
 
 function ReadyRequestsTable({
   buckets,
-  limit = 8,
 }: {
   buckets: Record<TriageBucket, TriageRequestCard[]>;
-  limit?: number;
 }) {
-  const rows = buckets.today.slice(0, limit);
+  const rows = buckets.today;
 
   return (
-    <div className="min-w-0 overflow-hidden">
+    <div className="min-h-0 flex-1 overflow-auto pr-1">
       <table className="w-full min-w-[440px] border-collapse text-left">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-white">
           <tr className="border-line text-muted border-b-[1.5px] text-xs font-semibold tracking-[0.08em] uppercase">
             <th className="py-2.5 pr-3">Client</th>
             <th className="py-2.5 pr-3">Urgency</th>
@@ -256,6 +256,56 @@ function MapActivityIndicator({ count }: { count: number }) {
   );
 }
 
+function LiveMapHeader({ activeDriverCount }: { activeDriverCount: number }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-baseline">
+      <h2 className="font-display text-ink text-[28px] font-semibold tracking-[-0.02em]">
+        Live map
+      </h2>
+      <div className="min-w-0 sm:justify-self-center">
+        <MapLegend />
+      </div>
+      <div className="sm:justify-self-end">
+        <MapActivityIndicator count={activeDriverCount} />
+      </div>
+    </div>
+  );
+}
+
+const mapLegendItems = [
+  {
+    className: "border-[rgba(32,56,192,0.34)] bg-[var(--mf-color-blue-300)]",
+    label: "Ready stop",
+  },
+  {
+    className: "border-[rgba(196,125,0,0.36)] bg-[var(--mf-color-amber-300)]",
+    label: "High urgency",
+  },
+  {
+    className: "border-[rgba(46,138,80,0.36)] bg-[var(--mf-color-green-300)]",
+    label: "Delivered",
+  },
+] as const;
+
+function MapLegend() {
+  return (
+    <ul
+      aria-label="Map marker legend"
+      className="text-muted flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium"
+    >
+      {mapLegendItems.map((item) => (
+        <li key={item.label} className="inline-flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className={`block h-3.5 w-3.5 rounded-full border-[2px] shadow-[0_0_0_2px_rgba(255,255,255,0.92)] ${item.className}`}
+          />
+          <span>{item.label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function dashboardKpiCopy(item: { id: string; label: string; value: string }) {
   switch (item.id) {
     case "new-intake":
@@ -283,7 +333,11 @@ function SummaryStatusStrip({
 }) {
   return (
     <section className="border-line rounded-[16px] border-[1.5px] bg-white px-4 py-3 sm:px-5">
-      <div className="grid divide-y divide-[rgba(24,24,60,0.08)] sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:divide-x">
+      <div
+        className={`grid divide-y divide-[rgba(24,24,60,0.08)] sm:grid-cols-2 sm:divide-y-0 xl:divide-x ${
+          items.length === 3 ? "xl:grid-cols-3" : "xl:grid-cols-4"
+        }`}
+      >
         {items.map((item) => {
           return (
             <div
@@ -536,10 +590,7 @@ export async function AdminDashboardView() {
 
       <div className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(420px,0.82fr)]">
         <section className="space-y-3">
-          <DashboardSectionHeader
-            title="Live map"
-            action={<MapActivityIndicator count={activeDriverCount} />}
-          />
+          <LiveMapHeader activeDriverCount={activeDriverCount} />
           <MapCanvas
             className="h-[640px]"
             initialView="greater-victoria"
@@ -579,6 +630,7 @@ export async function AdminInboxView({
   draftId?: string | null;
 }) {
   await ensureSeededData();
+  await syncConfiguredGmailForAdminInbox();
 
   const data = await getAdminInboxData(draftId);
   void demoMode;
@@ -721,47 +773,53 @@ export async function AdminInventoryView() {
   await ensureSeededData();
 
   const data = await getAdminInventoryData();
-  const inventorySummaryItems = data.inventoryKpis.map((item) => {
-    if (item.id === "route-ready-meals") {
-      return {
-        icon: "meal-container" as const,
-        id: item.id,
-        metric: `${item.value} meals`,
-        status: "Route-ready",
-      };
-    }
+  const inventorySummaryItems = data.inventoryKpis
+    .filter((item) => item.id !== "shortage-holds")
+    .map((item) => {
+      if (item.id === "route-ready-meals") {
+        return {
+          icon: "meal-container" as const,
+          id: item.id,
+          metric: `${item.value} meals`,
+          status: "Route-ready",
+        };
+      }
 
-    if (item.id === "refrigerated-meals") {
-      return {
-        icon: "snowflake" as const,
-        id: item.id,
-        metric: `${item.value} chilled`,
-        status: "Need cooler capacity",
-      };
-    }
+      if (item.id === "refrigerated-meals") {
+        return {
+          icon: "snowflake" as const,
+          id: item.id,
+          metric: `${item.value} chilled`,
+          status: "Need cooler capacity",
+        };
+      }
 
-    if (item.id === "shortage-holds") {
       return {
-        icon: "warning-alert" as const,
+        icon: "fridge" as const,
         id: item.id,
-        metric: `${item.value} holds`,
-        status: "Shortage review",
+        metric: `${item.value} perishables`,
+        status: "Use first",
       };
-    }
-
-    return {
-      icon: "fridge" as const,
-      id: item.id,
-      metric: `${item.value} perishables`,
-      status: "Use first",
-    };
-  });
+    });
+  const dietaryTagOptions = Array.from(
+    new Set(data.meals.flatMap((meal) => meal.dietaryTags))
+  );
+  const allergenFlagOptions = Array.from(
+    new Set(data.meals.flatMap((meal) => meal.allergenFlags))
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader title="Inventory" />
 
       <SummaryStatusStrip items={inventorySummaryItems} />
+
+      <AdminInventoryWorkflows
+        allergenFlagOptions={allergenFlagOptions}
+        defaultReceiptText={data.parserFixtureText}
+        defaultSourceNote={data.ingredientSourceNote}
+        dietaryTagOptions={dietaryTagOptions}
+      />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.95fr)]">
         <section className="space-y-3">
@@ -782,16 +840,10 @@ export async function AdminInventoryView() {
               {data.meals.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>
-                    <div className="flex min-w-[220px] items-start gap-3">
-                      <MealfloIcon name="meal-container" size={30} />
-                      <div className="space-y-1">
-                        <p className="text-ink font-medium">{item.name}</p>
-                        {item.sourceNote ? (
-                          <p className="text-muted text-sm leading-6">
-                            {displayKitchenLabel(item.sourceNote)}
-                          </p>
-                        ) : null}
-                      </div>
+                    <div className="min-w-[220px]">
+                      <p className="text-ink text-[17px] font-semibold">
+                        {item.name}
+                      </p>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted">{item.category}</TableCell>
@@ -839,26 +891,16 @@ export async function AdminInventoryView() {
                 <TableHeaderCell>Quantity</TableHeaderCell>
                 <TableHeaderCell>Storage</TableHeaderCell>
                 <TableHeaderCell>Source</TableHeaderCell>
-                <TableHeaderCell>Sort</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {data.ingredients.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>
-                    <div className="flex min-w-[220px] items-start gap-3">
-                      <MealfloIcon
-                        name={item.refrigerated ? "snowflake" : "fridge"}
-                        size={30}
-                      />
-                      <div className="space-y-1">
-                        <p className="text-ink font-medium">{item.name}</p>
-                        {item.notes ? (
-                          <p className="text-muted text-sm leading-6">
-                            {displayKitchenLabel(item.notes)}
-                          </p>
-                        ) : null}
-                      </div>
+                    <div className="min-w-[220px]">
+                      <p className="text-ink text-[17px] font-semibold">
+                        {item.name}
+                      </p>
                     </div>
                   </TableCell>
                   <TableCell>{item.quantity}</TableCell>
@@ -875,18 +917,12 @@ export async function AdminInventoryView() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted">{item.source}</TableCell>
-                  <TableCell className="text-muted">Suggested</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </section>
       </div>
-
-      <AdminInventoryWorkflows
-        defaultReceiptText={data.parserFixtureText}
-        defaultSourceNote={data.ingredientSourceNote}
-      />
     </div>
   );
 }

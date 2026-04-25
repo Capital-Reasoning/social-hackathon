@@ -1,9 +1,13 @@
-import { redirect } from "next/navigation";
+import { PublicFrame, PublicLandingView } from "@/views/public";
 
 export const metadata = {
   title: "Public intake",
 };
 
 export default function PublicPage() {
-  redirect("/demo/public");
+  return (
+    <PublicFrame active="home">
+      <PublicLandingView />
+    </PublicFrame>
+  );
 }

@@ -4,11 +4,21 @@ import { cn } from "@/lib/utils";
 
 export function Table({
   className,
+  scrollerClassName,
+  wrapperClassName,
   ...props
-}: ComponentPropsWithoutRef<"table">) {
+}: ComponentPropsWithoutRef<"table"> & {
+  scrollerClassName?: string;
+  wrapperClassName?: string;
+}) {
   return (
-    <div className="border-line overflow-hidden rounded-[16px] border-[1.5px] bg-white">
-      <div className="overflow-x-auto">
+    <div
+      className={cn(
+        "border-line overflow-hidden rounded-[16px] border-[1.5px] bg-white",
+        wrapperClassName
+      )}
+    >
+      <div className={cn("overflow-x-auto", scrollerClassName)}>
         <table
           className={cn("w-full min-w-full border-collapse", className)}
           {...props}

@@ -91,10 +91,11 @@ export function Textarea({
 export function Select({
   children,
   className,
+  leadingIcon,
   ...props
-}: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <div className="relative">
+}: SelectHTMLAttributes<HTMLSelectElement> & BaseInputProps) {
+  const control = (
+    <div className="relative w-full">
       <select className={cn(baseFieldClasses, "pr-12", className)} {...props}>
         {children}
       </select>
@@ -102,6 +103,23 @@ export function Select({
         aria-hidden="true"
         className="pointer-events-none absolute top-1/2 right-4 h-2.5 w-2.5 -translate-y-[60%] rotate-45 border-r-2 border-b-2 border-[rgba(24,24,60,0.42)]"
       />
+    </div>
+  );
+
+  if (!leadingIcon) {
+    return control;
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="flex h-[52px] shrink-0 items-center justify-center">
+        <MealfloIcon
+          name={leadingIcon}
+          size={30}
+          className="pointer-events-none"
+        />
+      </span>
+      {control}
     </div>
   );
 }

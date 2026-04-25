@@ -234,6 +234,9 @@ export type InboxQueueItem = {
 };
 
 export type AdminDirectoryRow = {
+  availabilityDays?: string;
+  availabilityDuration?: string;
+  availabilityWindow?: string;
   id: string;
   location: string;
   measure: string;
@@ -265,6 +268,8 @@ export type AdminInboxData = {
     accessNotes: string;
     address: string;
     contact: string;
+    contactEmail: string;
+    contactPhone: string;
     draftId: string | null;
     draftType: "other" | "request" | "volunteer";
     dietaryFlags: string;
@@ -336,7 +341,9 @@ export type AdminInventoryData = {
     suggestionConfidence: string;
   }>;
   meals: Array<{
+    allergenFlags: string[];
     category: string;
+    dietaryTags: string[];
     id: string;
     name: string;
     quantityAvailable: number;
@@ -570,6 +577,45 @@ function formatRelativeMinutes(value: number) {
   return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
 }
 
+const weekdayNames = {
+  FR: "Fri",
+  MO: "Mon",
+  SA: "Sat",
+  SU: "Sun",
+  TH: "Thu",
+  TU: "Tue",
+  WE: "Wed",
+} as const;
+
+function formatAvailabilityDays({
+  date,
+  recurringRule,
+}: {
+  date: string;
+  recurringRule: string | null;
+}) {
+  const recurringDays = recurringRule
+    ?.split(";")
+    .find((part) => part.startsWith("BYDAY="))
+    ?.replace("BYDAY=", "")
+    .split(",")
+    .map((day) => weekdayNames[day as keyof typeof weekdayNames])
+    .filter(Boolean);
+
+  if (recurringDays?.join(",") === "Mon,Tue,Wed,Thu,Fri") {
+    return "Mon-Fri";
+  }
+
+  if (recurringDays && recurringDays.length > 0) {
+    return recurringDays.join(", ");
+  }
+
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: VANCOUVER_TZ,
+    weekday: "short",
+  }).format(new Date(`${date}T12:00:00-07:00`));
+}
+
 function formatRelativeSeconds(value: number) {
   return formatRelativeMinutes(Math.max(1, Math.round(value / 60)));
 }
@@ -680,6 +726,225 @@ function selectedContact(input: {
   contactPhone?: string | null;
 }) {
   return input.contactPhone ?? input.contactEmail ?? "Reply channel pending";
+}
+
+function extractFirstEmail(value: string | null | undefined) {
+  return value?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? "";
+}
+
+function extractFirstPhone(value: string | null | undefined) {
+  return (
+    value?.match(
+      /(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}/
+    )?.[0] ?? ""
+  );
+}
+
+function textField(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function structuredTextField(
+  value: Record<string, unknown> | null | undefined,
+  key: string
+) {
+  return value ? textField(value[key]) : null;
+}
+
+function sourcePayloadRecord(intake: typeof intakeMessages.$inferSelect) {
+  return intake.sourcePayload ?? {};
+}
+
+function sourcePayloadTextField(
+  payload: Record<string, unknown> | null | undefined,
+  key: string
+) {
+  const value = payload?.[key];
+
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function gmailSourceKeyFromPayload(
+  payload: Record<string, unknown> | null | undefined
+) {
+  const messageId =
+    sourcePayloadTextField(payload, "gmailMessageId") ??
+    sourcePayloadTextField(payload, "messageId");
+
+  return messageId ? `gmail:${messageId}` : null;
+}
+
+function gmailMessageIdFromSourceKey(sourceKey: string) {
+  return sourceKey.startsWith("gmail:") ? sourceKey.slice(6) : sourceKey;
+}
+
+function gmailSourceKeyForIntake(intake: {
+  channel: "gmail" | "manual_entry" | "public_form";
+  sourcePayload?: Record<string, unknown> | null;
+}) {
+  return intake.channel === "gmail"
+    ? gmailSourceKeyFromPayload(intake.sourcePayload)
+    : null;
+}
+
+function submittedFieldsRecord(intake: typeof intakeMessages.$inferSelect) {
+  const fields = sourcePayloadRecord(intake).submittedFields;
+
+  return fields && typeof fields === "object" && !Array.isArray(fields)
+    ? (fields as Record<string, unknown>)
+    : null;
+}
+
+function extractTrailingLabeledValue(rawBody: string, label: string) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = rawBody.match(new RegExp(`${escaped}:\\s*([\\s\\S]+)$`, "i"));
+
+  return textField(match?.[1]);
+}
+
+function publicFormNote(intake: typeof intakeMessages.$inferSelect) {
+  if (intake.channel !== "public_form") {
+    return null;
+  }
+
+  const submitted = submittedFieldsRecord(intake);
+  const submittedMessage = structuredTextField(submitted, "message");
+
+  if (submittedMessage) {
+    return submittedMessage;
+  }
+
+  return (
+    extractTrailingLabeledValue(intake.rawBody, "Anything else to share") ??
+    extractTrailingLabeledValue(intake.rawBody, "Message") ??
+    textField(intake.rawBody)
+  );
+}
+
+function rawParagraphsForReview(
+  intake: typeof intakeMessages.$inferSelect | undefined
+) {
+  if (!intake) {
+    return [];
+  }
+
+  const body =
+    intake.channel === "public_form"
+      ? (publicFormNote(intake) ?? intake.rawBody)
+      : intake.rawBody;
+
+  return body
+    .split(/\n{2,}/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function splitNoteSentences(value: string) {
+  return value
+    .split(/\n+/)
+    .flatMap((line) => line.replace(/\s+/g, " ").split(/(?<=[.!?])\s+/))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function isNonOperationalNote(entry: string) {
+  const normalized = entry
+    .trim()
+    .replace(/[.!?,:;-]+$/g, "")
+    .toLowerCase();
+
+  if (!normalized) {
+    return true;
+  }
+
+  if (
+    /^(hi|hello|hey|dear mealflo|dear team|mealflo team|good morning|good afternoon|good evening)\b/.test(
+      normalized
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /^(thanks|thank you|thank-you|thx|cheers|regards|best|sincerely|sent from)\b/.test(
+      normalized
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(family desk|neighbour line|neighbor line|community desk|intake desk|dispatch team)\b/.test(
+      normalized
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function splitOperationalNoteSentences(value: string) {
+  return splitNoteSentences(value)
+    .filter((entry) => !isNonOperationalNote(entry))
+    .filter(Boolean);
+}
+
+function focusedRequestNotes(
+  payload: z.infer<typeof requestIntakeSchema>,
+  fallback?: string | null
+) {
+  const candidate = textField(fallback) ?? payload.message;
+  const sentences = splitOperationalNoteSentences(candidate);
+  const focused = sentences.filter((sentence) => {
+    if (/^(area|neighbou?rhood)\s*:/i.test(sentence)) {
+      return false;
+    }
+
+    if (
+      new RegExp(
+        `\\b(${payload.firstName}|${payload.lastName}|${payload.addressLine1.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}|${payload.municipality})\\b`,
+        "i"
+      ).test(sentence)
+    ) {
+      return false;
+    }
+
+    if (
+      /\b(meals?|grocer(?:y|ies)|hamper|household|people|family|home|need|would help|delivery request)\b/i.test(
+        sentence
+      ) &&
+      !/\b(text|call|phone|before|arrival|buzzer|intercom|door|stairs|knock|lobby|parking|leave|walker|wheelchair|side entrance)\b/i.test(
+        sentence
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return focused.join(" ") || "No extra access notes provided.";
+}
+
+function focusedVolunteerNotes(
+  payload: z.infer<typeof volunteerIntakeSchema>,
+  fallback?: string | null
+) {
+  const candidate = textField(fallback) ?? payload.message;
+  const sentences = splitOperationalNoteSentences(candidate);
+  const focused = sentences.filter(
+    (sentence) =>
+      !/\b(contact|available|availability|minutes?|hours?|starting|start from|near|window|vehicle|car|bike|hatchback|cooler|cold|stairs|comfortable|avoid stairs)\b/i.test(
+        sentence
+      )
+  );
+
+  return focused.join(" ") || "No extra route notes provided.";
 }
 
 function slugify(value: string) {
@@ -1483,15 +1748,107 @@ export async function resetDemoData() {
   };
 }
 
+async function listIgnoredGmailSourceKeys() {
+  const ignored = await getDb()
+    .select({
+      channel: intakeMessages.channel,
+      sourcePayload: intakeMessages.sourcePayload,
+    })
+    .from(intakeMessages)
+    .where(
+      and(eq(intakeMessages.channel, "gmail"), eq(intakeMessages.status, "ignored"))
+    );
+
+  return ignored
+    .map((entry) => gmailSourceKeyForIntake(entry))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
+async function insertIgnoredGmailTombstones(
+  sourceKeys: string[],
+  existingSourceKeys: Set<string>
+) {
+  const tombstoneKeys = sourceKeys.filter(
+    (sourceKey) => !existingSourceKeys.has(sourceKey)
+  );
+
+  if (tombstoneKeys.length === 0) {
+    return;
+  }
+
+  const now = new Date();
+
+  await getDb()
+    .insert(intakeMessages)
+    .values(
+      tombstoneKeys.map((sourceKey, index) => {
+        const gmailMessageId = gmailMessageIdFromSourceKey(sourceKey);
+
+        return {
+          id: `intake-ignored-gmail-${slugify(gmailMessageId).slice(0, 24)}-${index}`,
+          channel: "gmail" as const,
+          intakeKind: "other" as const,
+          subject: "Ignored Gmail message",
+          rawBody:
+            "This Gmail message was ignored and is hidden from the demo inbox.",
+          sourcePayload: {
+            gmailMessageId,
+            ignoredAt: now.toISOString(),
+          },
+          status: "ignored" as const,
+          receivedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        };
+      })
+    );
+}
+
 export async function seedDemoData() {
   const dataset = buildSeedDataset();
   const database = getDb();
+  const ignoredGmailSourceKeys = new Set(await listIgnoredGmailSourceKeys());
 
   await resetDemoData();
 
   await database.insert(depots).values(dataset.depots);
-  await database.insert(intakeMessages).values(dataset.intakeMessages);
-  await database.insert(intakeDrafts).values(dataset.intakeDrafts);
+  const intakeMessagesToInsert = dataset.intakeMessages.map((intake) => {
+    const sourceKey = gmailSourceKeyForIntake(intake);
+
+    return sourceKey && ignoredGmailSourceKeys.has(sourceKey)
+      ? {
+          ...intake,
+          status: "ignored" as const,
+        }
+      : intake;
+  });
+  const ignoredSeedIntakeIds = new Set(
+    intakeMessagesToInsert
+      .filter((intake) => intake.status === "ignored")
+      .map((intake) => intake.id)
+  );
+  const intakeDraftsToInsert = dataset.intakeDrafts.map((draft) =>
+    ignoredSeedIntakeIds.has(draft.intakeMessageId)
+      ? {
+          ...draft,
+          reviewedAt: new Date(),
+          reviewedBy: "Sarah, coordinator",
+          status: "ignored" as const,
+        }
+      : draft
+  );
+  const seededGmailSourceKeys = new Set(
+    intakeMessagesToInsert
+      .map((intake) => gmailSourceKeyForIntake(intake))
+      .filter((entry): entry is string => Boolean(entry))
+  );
+
+  await database.insert(intakeMessages).values(intakeMessagesToInsert);
+  await insertIgnoredGmailTombstones(
+    [...ignoredGmailSourceKeys],
+    seededGmailSourceKeys
+  );
+  await database.insert(intakeDrafts).values(intakeDraftsToInsert);
   await database.insert(volunteers).values(dataset.volunteers);
   await database
     .insert(volunteerAvailability)
@@ -1657,6 +2014,60 @@ function rawAddressFromParsedDraft(draft: ParsedIntakeDraft) {
   return undefined;
 }
 
+function publicFormSubmittedFields(intake: typeof intakeMessages.$inferSelect) {
+  return submittedFieldsRecord(intake);
+}
+
+function mergePublicFormSubmittedFields(
+  parsed: ParsedIntakeDraft,
+  intake: typeof intakeMessages.$inferSelect
+): ParsedIntakeDraft {
+  const submittedFields = publicFormSubmittedFields(intake);
+
+  if (parsed.draftType === "request") {
+    const submitted = requestIntakeSchema.safeParse(submittedFields);
+
+    if (!submitted.success) {
+      return parsed;
+    }
+
+    const payload = requestIntakeSchema.parse({
+      ...parsed.structuredPayload,
+      allergenFlags: submitted.data.allergenFlags,
+      coldChainRequired: submitted.data.coldChainRequired,
+      dietaryTags: submitted.data.dietaryTags,
+      message: submitted.data.message,
+    });
+
+    return {
+      ...parsed,
+      structuredPayload: payload,
+      summary: summarizeRequestPayload(payload),
+    };
+  }
+
+  if (parsed.draftType === "volunteer") {
+    const submitted = volunteerIntakeSchema.safeParse(submittedFields);
+
+    if (!submitted.success) {
+      return parsed;
+    }
+
+    const payload = volunteerIntakeSchema.parse({
+      ...parsed.structuredPayload,
+      message: submitted.data.message,
+    });
+
+    return {
+      ...parsed,
+      structuredPayload: payload,
+      summary: summarizeVolunteerPayload(payload),
+    };
+  }
+
+  return parsed;
+}
+
 export async function parsePublicIntakeDraft(draftId: string) {
   const database = getDb();
   const [draft] = await database
@@ -1679,15 +2090,18 @@ export async function parsePublicIntakeDraft(draftId: string) {
     return null;
   }
 
-  const parsed = await parseIncomingIntake({
-    channel: "public_form",
-    rawAddress: intake.rawAddress,
-    rawBody: intake.rawBody,
-    senderEmail: intake.senderEmail,
-    senderName: intake.senderName,
-    senderPhone: intake.senderPhone,
-    subject: intake.subject,
-  });
+  const parsed = mergePublicFormSubmittedFields(
+    await parseIncomingIntake({
+      channel: "public_form",
+      rawAddress: intake.rawAddress,
+      rawBody: intake.rawBody,
+      senderEmail: intake.senderEmail,
+      senderName: intake.senderName,
+      senderPhone: intake.senderPhone,
+      subject: intake.subject,
+    }),
+    intake
+  );
   const now = new Date();
   const [updatedDraft] = await database
     .update(intakeDrafts)
@@ -1803,6 +2217,13 @@ export async function createGmailIntake(
     .limit(1);
 
   if (existing) {
+    if (existing.status === "ignored") {
+      return {
+        action: "ignored",
+        intakeId: existing.id,
+      };
+    }
+
     return {
       action: "duplicate",
       intakeId: existing.id,
@@ -1987,12 +2408,14 @@ export async function approveDraft(draftId: string) {
 
   if (draft.draftType === "request") {
     const payload = requestIntakeSchema.parse(draft.structuredPayload);
+    const reviewNotes = focusedRequestNotes(
+      payload,
+      structuredTextField(draft.structuredPayload, "accessNotes")
+    );
     const slug = slugify(`${payload.firstName}-${payload.lastName}`);
     const clientId = `client-${slug}`;
     const requestId = `request-${slug}-${now.getTime()}`;
-
-    await database.insert(clients).values({
-      id: clientId,
+    const clientValues = {
       sourceIntakeDraftId: draft.id,
       firstName: payload.firstName,
       lastName: payload.lastName,
@@ -2005,12 +2428,29 @@ export async function approveDraft(draftId: string) {
       householdSize: payload.householdSize,
       dietaryTags: payload.dietaryTags,
       allergenFlags: payload.allergenFlags,
-      accessNotes: payload.message,
+      accessNotes: reviewNotes,
       active: true,
       lastApprovedRequestAt: now,
-      createdAt: now,
       updatedAt: now,
-    });
+    };
+    const [existingClient] = await database
+      .select({ id: clients.id })
+      .from(clients)
+      .where(eq(clients.id, clientId))
+      .limit(1);
+
+    if (existingClient) {
+      await database
+        .update(clients)
+        .set(clientValues)
+        .where(eq(clients.id, clientId));
+    } else {
+      await database.insert(clients).values({
+        id: clientId,
+        ...clientValues,
+        createdAt: now,
+      });
+    }
 
     await database.insert(deliveryRequests).values({
       id: requestId,
@@ -2027,7 +2467,7 @@ export async function approveDraft(draftId: string) {
       coldChainRequired: payload.coldChainRequired,
       dietaryTagsSnapshot: payload.dietaryTags,
       allergenFlagsSnapshot: payload.allergenFlags,
-      accessNotes: payload.message,
+      accessNotes: reviewNotes,
       originalMessageExcerpt: payload.message,
       status: "approved",
       approvedAt: now,
@@ -2064,17 +2504,20 @@ export async function approveDraft(draftId: string) {
 
   if (draft.draftType === "volunteer") {
     const payload = volunteerIntakeSchema.parse(draft.structuredPayload);
+    const reviewNotes = focusedVolunteerNotes(
+      payload,
+      structuredTextField(draft.structuredPayload, "routeNotes") ??
+        structuredTextField(draft.structuredPayload, "notes")
+    );
     const slug = slugify(`${payload.firstName}-${payload.lastName}`);
     const volunteerId = `volunteer-${slug}`;
-
-    await database.insert(volunteers).values({
-      id: volunteerId,
+    const volunteerValues = {
       sourceIntakeDraftId: draft.id,
       firstName: payload.firstName,
       lastName: payload.lastName,
       phone: payload.contactPhone,
       email: payload.contactEmail,
-      role: "volunteer",
+      role: "volunteer" as const,
       homeArea: payload.homeArea,
       homeMunicipality: payload.homeMunicipality,
       hasVehicleAccess: payload.hasVehicleAccess,
@@ -2083,16 +2526,33 @@ export async function approveDraft(draftId: string) {
       canClimbStairs: payload.canClimbStairs,
       languages: ["English"],
       active: true,
-      notes: payload.message,
-      createdAt: now,
+      notes: reviewNotes,
       updatedAt: now,
-    });
+    };
+    const [existingVolunteer] = await database
+      .select({ id: volunteers.id })
+      .from(volunteers)
+      .where(eq(volunteers.id, volunteerId))
+      .limit(1);
+
+    if (existingVolunteer) {
+      await database
+        .update(volunteers)
+        .set(volunteerValues)
+        .where(eq(volunteers.id, volunteerId));
+    } else {
+      await database.insert(volunteers).values({
+        id: volunteerId,
+        ...volunteerValues,
+        createdAt: now,
+      });
+    }
 
     await database.insert(volunteerAvailability).values({
       id: `availability-${volunteerId}-${now.getTime()}`,
       volunteerId,
       source: "public_form",
-      rawText: payload.message,
+      rawText: reviewNotes,
       date: seedMetadata.baseDates.tomorrow,
       windowStart: payload.windowStart,
       windowEnd: payload.windowEnd,
@@ -3061,7 +3521,13 @@ export async function getAdminInboxData(
 ): Promise<AdminInboxData> {
   const graph = await loadDemoGraph();
   const queue = graph.draftRows
-    .filter((entry) => entry.status === "pending")
+    .filter((entry) => {
+      const intake = graph.intakeRows.find(
+        (intakeRow) => intakeRow.id === entry.intakeMessageId
+      );
+
+      return entry.status === "pending" && intake?.status !== "ignored";
+    })
     .sort((left, right) => {
       const leftIntake = graph.intakeRows.find(
         (entry) => entry.id === left.intakeMessageId
@@ -3168,8 +3634,20 @@ export async function getAdminInboxData(
         ].filter(Boolean);
 
         return {
+          availabilityDays: availability
+            ? formatAvailabilityDays({
+                date: availability.date,
+                recurringRule: availability.recurringRule,
+              })
+            : undefined,
+          availabilityDuration: availability
+            ? `${formatRelativeMinutes(availability.minutesAvailable)} available`
+            : undefined,
+          availabilityWindow: availability
+            ? `${availability.windowStart}-${availability.windowEnd}`
+            : undefined,
           id: volunteer.id,
-          location: `${volunteer.homeArea}, ${volunteer.homeMunicipality}`,
+          location: volunteer.homeArea,
           measure: availability
             ? `${formatRelativeMinutes(availability.minutesAvailable)}, ${availability.windowStart}-${availability.windowEnd}`
             : volunteer.active
@@ -3272,23 +3750,47 @@ export async function getAdminInboxData(
           : (selectedIntake?.senderPhone ??
             selectedIntake?.senderEmail ??
             "Reply channel pending"),
-      rawParagraphs: selectedIntake?.rawBody
-        ? selectedIntake.rawBody
-            .split(/\n{2,}/)
-            .map((entry) => entry.trim())
-            .filter(Boolean)
-        : [],
+      contactEmail:
+        parsedRequest?.contactEmail ??
+        parsedVolunteer?.contactEmail ??
+        extractFirstEmail(
+          `${selectedIntake?.senderEmail ?? ""}\n${selectedIntake?.rawBody ?? ""}`
+        ),
+      contactPhone:
+        parsedRequest?.contactPhone ??
+        parsedVolunteer?.contactPhone ??
+        extractFirstPhone(
+          `${selectedIntake?.senderPhone ?? ""}\n${selectedIntake?.rawBody ?? ""}`
+        ),
+      rawParagraphs: rawParagraphsForReview(selectedIntake),
       needBy: parsedRequest?.dueBucket ?? "today",
       householdSize: String(parsedRequest?.householdSize ?? 1),
       dietaryFlags: sentenceCaseList([
         ...(parsedRequest?.dietaryTags ?? []),
         ...(parsedRequest?.allergenFlags ?? []),
       ]),
-      accessNotes:
-        parsedRequest?.message ??
-        parsedVolunteer?.message ??
-        selectedIntake?.rawBody ??
-        "Notes pending review.",
+      accessNotes: parsedRequest
+        ? focusedRequestNotes(
+            parsedRequest,
+            structuredTextField(
+              selectedDraft?.structuredPayload,
+              "accessNotes"
+            ) ?? (selectedIntake ? publicFormNote(selectedIntake) : null)
+          )
+        : parsedVolunteer
+          ? focusedVolunteerNotes(
+              parsedVolunteer,
+              structuredTextField(
+                selectedDraft?.structuredPayload,
+                "routeNotes"
+              ) ??
+                structuredTextField(
+                  selectedDraft?.structuredPayload,
+                  "notes"
+                ) ??
+                (selectedIntake ? publicFormNote(selectedIntake) : null)
+            )
+          : (selectedIntake?.rawBody ?? "Notes pending review."),
       sourceChannel: selectedIntake?.channel === "gmail" ? "gmail" : "form",
       structuredPayload: selectedDraft?.structuredPayload ?? {},
       subject: selectedIntake?.subject ?? selectedDraft?.summary ?? "No intake",
@@ -3530,9 +4032,11 @@ export async function getAdminInventoryData(): Promise<AdminInventoryData> {
           left.name.localeCompare(right.name)
       )
       .map((meal) => ({
+        allergenFlags: meal.allergenFlags,
         id: meal.id,
         name: meal.name,
         category: meal.category.replace(/_/g, " "),
+        dietaryTags: meal.dietaryTags,
         quantity: String(meal.quantityAvailable),
         quantityAvailable: meal.quantityAvailable,
         refrigerated: meal.refrigerated,

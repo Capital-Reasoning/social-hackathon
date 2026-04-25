@@ -139,6 +139,30 @@
   }
 }
 
+@keyframes mfModalBackdropIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+
+  to {
+    opacity: 1;
+    backdrop-filter: blur(2px);
+  }
+}
+
+@keyframes mfModalPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @theme inline {
   --color-bg: var(--mf-color-bg);
   --color-surface: var(--mf-color-surface);
@@ -525,6 +549,63 @@ textarea {
 
 .maplibregl-canvas:active {
   cursor: grabbing;
+}
+
+.mealflo-map-marker-tooltip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  z-index: 18;
+  min-width: 190px;
+  max-width: 260px;
+  padding: 10px 12px 11px;
+  border: 1.5px solid rgba(24, 24, 60, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 14px 32px rgba(24, 24, 60, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(-50%, 4px, 0);
+  transition:
+    opacity var(--mf-duration-fast) var(--mf-ease-standard),
+    transform var(--mf-duration-fast) var(--mf-ease-standard);
+  backdrop-filter: blur(10px);
+}
+
+.mealflo-map-marker-tooltip::after {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-right: 1.5px solid rgba(24, 24, 60, 0.12);
+  border-bottom: 1.5px solid rgba(24, 24, 60, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  content: "";
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.mealflo-map-marker:hover .mealflo-map-marker-tooltip,
+.mealflo-map-marker:focus .mealflo-map-marker-tooltip,
+.mealflo-map-marker:focus-visible .mealflo-map-marker-tooltip {
+  opacity: 1;
+  transform: translate3d(-50%, 0, 0);
+}
+
+.mealflo-map-tooltip-name {
+  color: var(--mf-color-ink);
+  font-family: var(--mf-font-display);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.18;
+}
+
+.mealflo-map-tooltip-description {
+  margin-top: 4px;
+  color: var(--mf-color-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 @media (prefers-reduced-motion: reduce) {

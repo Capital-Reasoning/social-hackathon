@@ -16,6 +16,7 @@ import {
   getDriverOfferData,
   markDraftOther,
   heartbeatDriverSession,
+  ignoreDraft,
   parseInventoryDocument,
   parsePublicIntakeDraft,
   recordManualInventoryEntry,
@@ -25,6 +26,7 @@ import {
   startDriverSession,
 } from "@/server/mealflo/backend";
 import {
+  clients,
   deliverableMeals,
   driverSessions,
   ingredientItems,
@@ -86,6 +88,12 @@ describe.sequential("backend foundations", () => {
 
     expect(parsedIntake.status).toBe("draft_ready");
     expect(inboxAfterParse.selectedItem.isParsing).toBe(false);
+    expect(inboxAfterParse.selectedItem.rawParagraphs).toEqual([
+      "Three meals would help after dialysis. Please call from the lobby.",
+    ]);
+    expect(inboxAfterParse.selectedItem.accessNotes).toBe(
+      "Please call from the lobby."
+    );
   });
 
   it("ingests only Mealflo Gmail alias messages into pending drafts", async () => {
@@ -153,6 +161,67 @@ describe.sequential("backend foundations", () => {
     expect(inbox.inboxItems.some((item) => item.id === draft.id)).toBe(true);
   });
 
+  it("keeps ignored Gmail messages hidden across sync and reseed", async () => {
+    const gmailMessage = {
+      deliveredTo: ["info+mealflo@capitalreasoning.com"],
+      fromEmail: "ignored.sender@example.com",
+      fromName: "Ignored Sender",
+      id: "gmail-ignored-source-test",
+      rawBody:
+        "My name is Ignored Sender. I need one meal today at 1320 Bond St, Victoria.",
+      subject: "Please ignore this one",
+      to: ["info+mealflo@capitalreasoning.com"],
+    };
+    const created = await createGmailIntake(gmailMessage);
+
+    expect(created.action).toBe("created");
+
+    if (created.action !== "created") {
+      throw new Error("Expected staged Gmail message to create a draft.");
+    }
+
+    await ignoreDraft(created.draftId);
+
+    const sameSync = await createGmailIntake(gmailMessage);
+    const inboxAfterIgnore = await getAdminInboxData();
+
+    expect(sameSync.action).toBe("ignored");
+    expect(
+      inboxAfterIgnore.inboxItems.some((item) => item.id === created.draftId)
+    ).toBe(false);
+
+    await seedDemoData();
+
+    const afterReseed = await createGmailIntake(gmailMessage);
+    const inboxAfterReseed = await getAdminInboxData();
+
+    expect(afterReseed.action).toBe("ignored");
+    expect(
+      inboxAfterReseed.inboxItems.some((item) => item.sender === "Ignored Sender")
+    ).toBe(false);
+  });
+
+  it("approves existing Gmail request drafts without duplicate client errors", async () => {
+    const db = getDb();
+    const inbox = await getAdminInboxData("draft-request-hillside");
+
+    expect(inbox.selectedItem.accessNotes).toBe(
+      "Text before arrival because the buzzer directory is out of date."
+    );
+
+    const approved = await approveDraft("draft-request-hillside");
+    const [client] = await db
+      .select()
+      .from(clients)
+      .where(eq(clients.id, "client-amina-yusuf"));
+
+    expect(approved.recordType).toBe("delivery_request");
+    expect(client.firstName).toBe("Amina");
+    expect(client.accessNotes).toBe(
+      "Text before arrival because the buzzer directory is out of date."
+    );
+  });
+
   it("approves a volunteer draft into structured volunteer records", async () => {
     const db = getDb();
     const created = await createVolunteerIntake({
@@ -164,8 +233,10 @@ describe.sequential("backend foundations", () => {
       windowStart: "16:30",
       windowEnd: "18:00",
       hasVehicleAccess: true,
-      message: "Happy to cover a short route after work with my hatchback.",
+      message:
+        "Happy to cover a short route after work with my hatchback. Please keep assignments close to Oaklands.",
     });
+    const inbox = await getAdminInboxData(created.draftId);
 
     const approved = await approveDraft(created.draftId);
     const [volunteer] = await db
@@ -177,9 +248,19 @@ describe.sequential("backend foundations", () => {
       .from(volunteerAvailability)
       .where(eq(volunteerAvailability.volunteerId, approved.recordId));
 
+    expect(inbox.selectedItem.rawParagraphs).toEqual([
+      "Happy to cover a short route after work with my hatchback. Please keep assignments close to Oaklands.",
+    ]);
+    expect(inbox.selectedItem.accessNotes).toBe(
+      "Please keep assignments close to Oaklands."
+    );
     expect(approved.recordType).toBe("volunteer");
     expect(volunteer.firstName).toBe("Jules");
+    expect(volunteer.notes).toBe("Please keep assignments close to Oaklands.");
     expect(availability.minutesAvailable).toBe(60);
+    expect(availability.rawText).toBe(
+      "Please keep assignments close to Oaklands."
+    );
   });
 
   it("marks a pending draft for manual intake triage", async () => {

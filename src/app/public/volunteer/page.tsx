@@ -1,9 +1,13 @@
-import { redirect } from "next/navigation";
+import { PublicFrame, PublicVolunteerView } from "@/views/public";
 
 export const metadata = {
   title: "Volunteer",
 };
 
 export default function PublicVolunteerPage() {
-  redirect("/demo/public?view=volunteer");
+  return (
+    <PublicFrame active="volunteer">
+      <PublicVolunteerView />
+    </PublicFrame>
+  );
 }

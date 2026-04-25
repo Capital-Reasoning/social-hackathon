@@ -14,6 +14,7 @@ import locationPin from "../../../design/assets/icons/location-pin.png";
 import mealContainer from "../../../design/assets/icons/meal-container.png";
 
 type MarkerPoint = {
+  description?: string;
   icon?: "delivery-van" | "grocery-bag" | "location-pin" | "meal-container";
   id: string;
   label: string;
@@ -113,6 +114,26 @@ function getMarkerLabel(label: string) {
     .map((word) => word[0])
     .join("")
     .toUpperCase();
+}
+
+function createMarkerTooltip(marker: MarkerPoint) {
+  const tooltip = document.createElement("div");
+  tooltip.className = "mealflo-map-marker-tooltip";
+  tooltip.setAttribute("aria-hidden", "true");
+
+  const label = document.createElement("p");
+  label.className = "mealflo-map-tooltip-name";
+  label.textContent = marker.label;
+  tooltip.append(label);
+
+  if (marker.description) {
+    const description = document.createElement("p");
+    description.className = "mealflo-map-tooltip-description";
+    description.textContent = marker.description;
+    tooltip.append(description);
+  }
+
+  return tooltip;
 }
 
 function getMapStyle() {
@@ -356,12 +377,15 @@ export function MapCanvas({
       }
 
       const el = document.createElement("div");
-      el.title = marker.label;
-      el.setAttribute("aria-label", marker.label);
+      el.setAttribute(
+        "aria-label",
+        marker.description ? `${marker.label}, ${marker.description}` : marker.label
+      );
+      el.tabIndex = 0;
 
       if (markerStyle === "dot") {
         el.className =
-          "flex h-4 w-4 items-center justify-center rounded-full border-[2px] border-white/95 shadow-sm";
+          "mealflo-map-marker relative flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border-[2px] border-white/95 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.72)]";
         el.style.backgroundColor = toneColors[marker.tone];
         el.style.boxShadow = "0 2px 7px rgba(24, 24, 60, 0.24)";
 
@@ -374,7 +398,7 @@ export function MapCanvas({
         el.append(innerDot);
       } else if (markerStyle === "icon") {
         el.className =
-          "flex h-11 w-11 items-center justify-center rounded-full border-[1.5px] border-white/95 bg-white/90 shadow-[0_6px_16px_rgba(24,24,60,0.14)]";
+          "mealflo-map-marker relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-white/95 bg-white/90 shadow-[0_6px_16px_rgba(24,24,60,0.14)] transition-[transform,box-shadow] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-standard)] hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.72)]";
         el.style.borderColor = toneBorders[marker.tone];
 
         const image = document.createElement("img");
@@ -386,7 +410,7 @@ export function MapCanvas({
         el.append(image);
       } else {
         el.className =
-          "flex min-h-11 items-center justify-center rounded-full border-[1.5px] border-white/90 px-3";
+          "mealflo-map-marker relative flex min-h-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-white/90 px-3 transition-[transform,box-shadow] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-standard)] hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.72)]";
         el.style.backgroundColor = toneColors[marker.tone];
         el.style.borderColor = toneBorders[marker.tone];
 
@@ -399,6 +423,8 @@ export function MapCanvas({
         label.style.color = "#1c1c2e";
         el.append(label);
       }
+
+      el.append(createMarkerTooltip(marker));
 
       const createdMarker = new maplibregl.Marker({
         element: el,

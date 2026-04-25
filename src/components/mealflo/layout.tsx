@@ -60,7 +60,7 @@ export function TopBar({
     <header className="bg-primary sticky top-0 z-30 border-b-[1.5px] border-[rgba(170,120,0,0.35)]">
       <div
         className={cn(
-          "mx-auto grid min-h-[76px] gap-3 px-4 py-0 sm:px-5 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:px-7",
+          "mx-auto grid min-h-[76px] gap-3 px-3 py-0 sm:px-4 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:px-4",
           maxWidthClassName
         )}
       >

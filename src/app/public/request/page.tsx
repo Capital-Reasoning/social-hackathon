@@ -1,9 +1,13 @@
-import { redirect } from "next/navigation";
+import { PublicFrame, PublicRequestView } from "@/views/public";
 
 export const metadata = {
   title: "Request food",
 };
 
 export default function PublicRequestPage() {
-  redirect("/demo/public?view=request");
+  return (
+    <PublicFrame active="request">
+      <PublicRequestView />
+    </PublicFrame>
+  );
 }

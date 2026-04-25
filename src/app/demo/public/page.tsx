@@ -31,7 +31,12 @@ function PublicView({ view }: { view: PublicDemoView }) {
     return <PublicVolunteerView />;
   }
 
-  return <PublicLandingView />;
+  return (
+    <PublicLandingView
+      requestHref="/demo/public?view=request"
+      volunteerHref="/demo/public?view=volunteer"
+    />
+  );
 }
 
 export default async function DemoPublicPage({

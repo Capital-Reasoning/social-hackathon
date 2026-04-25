@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { AdminInboxData, InboxQueueItem } from "@/server/mealflo/backend";
 
-type DraftKind = "request" | "volunteer";
+type DraftKind = "other" | "request" | "volunteer";
 
 type AdminInboxWorkbenchProps = {
   initialData: AdminInboxData;
@@ -30,6 +30,7 @@ type LoadState = {
 const kindTabs: Array<{ key: DraftKind; label: string }> = [
   { key: "request", label: "Clients" },
   { key: "volunteer", label: "Drivers" },
+  { key: "other", label: "Other" },
 ];
 
 function sourceLabel(item: InboxQueueItem) {
@@ -37,21 +38,38 @@ function sourceLabel(item: InboxQueueItem) {
 }
 
 function actionLabel(kind: AdminInboxData["selectedItem"]["draftType"]) {
-  return kind === "volunteer" ? "Approve driver" : "Approve request";
-}
-
-function rowKind(item: InboxQueueItem): DraftKind | null {
-  if (item.draftType === "request" || item.draftType === "volunteer") {
-    return item.draftType;
+  if (kind === "volunteer") {
+    return "Approve driver";
   }
 
-  return null;
+  if (kind === "other") {
+    return "Needs triage";
+  }
+
+  return "Approve request";
 }
 
-async function fetchDraftData(draftId: string) {
-  const response = await fetch(
-    `/api/admin/inbox?draft=${encodeURIComponent(draftId)}`
-  );
+function rowKind(item: InboxQueueItem): DraftKind {
+  return item.draftType === "request" || item.draftType === "volunteer"
+    ? item.draftType
+    : "other";
+}
+
+async function fetchDraftData(
+  draftId?: string,
+  options: { syncGmail?: boolean } = {}
+) {
+  const params = new URLSearchParams();
+
+  if (draftId) {
+    params.set("draft", draftId);
+  }
+
+  if (options.syncGmail) {
+    params.set("sync", "gmail");
+  }
+
+  const response = await fetch(`/api/admin/inbox?${params.toString()}`);
   const json = (await response.json()) as {
     data?: AdminInboxData;
     error?: string;
@@ -69,26 +87,28 @@ function RequestReviewModal({
   data,
   loadState,
   onClose,
+  onResolved,
 }: {
   data: AdminInboxData | null;
   loadState: LoadState;
   onClose: () => void;
+  onResolved: (draftId: string) => void;
 }) {
   const selected = data?.selectedItem;
   const rawText = selected?.rawParagraphs.join("\n\n").trim();
-  const showSource =
-    selected?.sourceChannel === "gmail" || selected?.draftType === "volunteer";
+  const isOther = selected?.draftType === "other";
+  const showSource = Boolean(rawText);
   const sourceTitle =
     selected?.sourceChannel === "gmail" ? "Source" : "Form notes";
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(28,28,46,0.34)] px-3 py-4 backdrop-blur-[2px] sm:px-6"
+      className="fixed inset-0 z-50 flex animate-[mfModalBackdropIn_180ms_var(--mf-ease-out)] items-center justify-center bg-[rgba(28,28,46,0.34)] px-3 py-4 backdrop-blur-[2px] sm:px-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="inbox-review-title"
     >
-      <div className="border-line max-h-[calc(100vh-2rem)] w-full max-w-[1180px] overflow-hidden rounded-[22px] border-[1.5px] bg-white shadow-[var(--mf-shadow-elevated)]">
+      <div className="border-line max-h-[calc(100vh-2rem)] w-full max-w-[1180px] animate-[mfModalPanelIn_260ms_var(--mf-ease-spring)] overflow-hidden rounded-[22px] border-[1.5px] bg-white shadow-[var(--mf-shadow-elevated)]">
         <div className="border-line flex items-start justify-between gap-4 border-b bg-[var(--mf-color-neutral-50)] px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="text-muted text-sm font-medium">
@@ -103,12 +123,12 @@ function RequestReviewModal({
           </div>
           <Button
             type="button"
-            variant="quiet"
             iconOnly
             aria-label="Close review"
+            className="min-h-[48px] border-transparent bg-transparent p-0 text-[var(--mf-color-muted)] hover:-translate-y-0.5 hover:border-transparent hover:bg-transparent hover:text-[var(--mf-color-ink)]"
             onClick={onClose}
           >
-            <MealfloIcon name="close-x" size={22} />
+            <MealfloIcon name="close-x" size={28} />
           </Button>
         </div>
 
@@ -117,6 +137,15 @@ function RequestReviewModal({
             <div className="border-line text-error-text rounded-[16px] border-[1.5px] bg-[var(--mf-color-red-50)] p-4">
               {loadState.message}
             </div>
+          ) : selected && isOther ? (
+            <section className="mx-auto w-full max-w-[780px] space-y-3">
+              <h4 className="font-display text-ink text-[22px] font-semibold">
+                Message
+              </h4>
+              <div className="border-line bg-surface-tint text-ink min-h-[360px] rounded-[16px] border-[1.5px] p-4 text-[15px] leading-7 whitespace-pre-wrap">
+                {rawText || "No message body was included."}
+              </div>
+            </section>
           ) : selected ? (
             <div
               className={cn(
@@ -127,7 +156,7 @@ function RequestReviewModal({
               )}
             >
               {showSource ? (
-                <section className="min-w-0 space-y-3">
+                <section className="min-w-0 space-y-5">
                   <h4 className="font-display text-ink text-[22px] font-semibold">
                     {sourceTitle}
                   </h4>
@@ -137,13 +166,14 @@ function RequestReviewModal({
                 </section>
               ) : null}
 
-              <section className="min-w-0 space-y-3">
+              <section className="min-w-0 space-y-5">
                 <h4 className="font-display text-ink text-[22px] font-semibold">
                   Parsed fields
                 </h4>
                 <AdminInboxReview
                   key={selected.draftId ?? "empty"}
                   selectedItem={selected}
+                  onResolved={onResolved}
                   primaryActionLabel={actionLabel(selected.draftType)}
                 />
               </section>
@@ -177,6 +207,8 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
     message: "",
     status: "idle",
   });
+  const [openingDraftId, setOpeningDraftId] = useState<string | null>(null);
+  const [isSyncingGmail, setIsSyncingGmail] = useState(false);
   const rows = useMemo(
     () => data.inboxItems.filter((item) => rowKind(item) === activeKind),
     [activeKind, data.inboxItems]
@@ -188,6 +220,7 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
       volunteer: data.inboxItems.filter(
         (item) => item.draftType === "volunteer"
       ).length,
+      other: data.inboxItems.filter((item) => rowKind(item) === "other").length,
     }),
     [data.inboxItems]
   );
@@ -195,9 +228,9 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
   useEffect(() => {
     let cancelled = false;
 
-    async function refreshInbox() {
+    async function refreshInbox(options: { syncGmail?: boolean } = {}) {
       try {
-        const nextData = await fetchDraftData("");
+        const nextData = await fetchDraftData(undefined, options);
 
         if (!cancelled) {
           setData(nextData);
@@ -206,6 +239,8 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
         // Keep the current inbox visible if a background refresh misses.
       }
     }
+
+    void refreshInbox({ syncGmail: true });
 
     const interval = window.setInterval(() => {
       void refreshInbox();
@@ -217,20 +252,19 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
     };
   }, []);
 
+  async function syncGmail() {
+    setIsSyncingGmail(true);
+
+    try {
+      setData(await fetchDraftData(undefined, { syncGmail: true }));
+    } finally {
+      setIsSyncingGmail(false);
+    }
+  }
+
   async function openReview(item: InboxQueueItem) {
     setLoadState({ message: "", status: "idle" });
-    setModalData({
-      ...data,
-      selectedItem:
-        data.selectedItem.draftId === item.id
-          ? data.selectedItem
-          : {
-              ...data.selectedItem,
-              draftId: null,
-              sender: item.sender,
-              subject: item.subject,
-            },
-    });
+    setOpeningDraftId(item.id);
 
     try {
       setModalData(await fetchDraftData(item.id));
@@ -242,119 +276,199 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
             : "Draft details could not be loaded.",
         status: "error",
       });
+      setModalData({
+        ...data,
+        selectedItem: {
+          ...data.selectedItem,
+          draftId: null,
+          sender: item.sender,
+          subject: item.subject,
+        },
+      });
+    } finally {
+      setOpeningDraftId(null);
     }
+  }
+
+  function handleDraftResolved(draftId: string) {
+    setModalData(null);
+    setData((current) => ({
+      ...current,
+      inboxItems: current.inboxItems.filter((item) => item.id !== draftId),
+    }));
+    void fetchDraftData()
+      .then((nextData) => setData(nextData))
+      .catch(() => {
+        // The optimistic removal keeps the demo moving if a refresh blips.
+      });
   }
 
   return (
     <section className="min-w-0 space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="font-display text-ink text-[30px] font-semibold tracking-[-0.02em]">
-          New requests
-        </h2>
-        <div
-          className="border-line inline-grid w-full max-w-[360px] grid-cols-2 rounded-full border-[1.5px] bg-white p-1"
-          aria-label="New request type"
-        >
-          {kindTabs.map((tab) => {
-            const active = activeKind === tab.key;
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-ink text-[30px] font-semibold tracking-[-0.02em]">
+            New requests
+          </h2>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            leading={<MealfloIcon name="repeat-arrows" size={16} />}
+            disabled={isSyncingGmail}
+            className="min-h-[38px] px-3 text-xs"
+            onClick={() => void syncGmail()}
+          >
+            {isSyncingGmail ? "Checking" : "Check Gmail"}
+          </Button>
+        </div>
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+          <div
+            className="border-line inline-grid w-full grid-cols-3 rounded-full border-[1.5px] bg-white p-1 sm:w-[460px]"
+            aria-label="New request type"
+          >
+            {kindTabs.map((tab) => {
+              const active = activeKind === tab.key;
 
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                aria-pressed={active}
-                className={cn(
-                  "min-h-[44px] rounded-full px-4 text-sm font-semibold transition-[transform,background-color,border-color,color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)]",
-                  active
-                    ? "bg-[var(--mf-color-yellow-300)]"
-                    : "hover:bg-[var(--mf-color-yellow-50)]"
-                )}
-                style={{
-                  color: active
-                    ? "var(--mf-color-ink)"
-                    : "var(--mf-color-muted)",
-                }}
-                onClick={() => setActiveKind(tab.key)}
-              >
-                {tab.label} ({counts[tab.key]})
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  aria-pressed={active}
+                  className={cn(
+                    "min-h-[44px] rounded-full px-4 text-sm font-semibold transition-[transform,background-color,border-color,color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)]",
+                    active
+                      ? "bg-[var(--mf-color-yellow-300)]"
+                      : "hover:bg-[var(--mf-color-yellow-50)]"
+                  )}
+                  style={{
+                    color: active
+                      ? "var(--mf-color-ink)"
+                      : "var(--mf-color-muted)",
+                  }}
+                  onClick={() => setActiveKind(tab.key)}
+                >
+                  {tab.label} ({counts[tab.key]})
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <Table className="w-full min-w-[720px]">
+      <Table
+        className="w-full min-w-[760px] table-fixed"
+        wrapperClassName="min-h-[402px]"
+      >
+        <colgroup>
+          <col className="w-[34%]" />
+          <col className="w-[42%]" />
+          <col className="w-[11%]" />
+          <col className="w-[13%]" />
+        </colgroup>
         <TableHead>
           <TableRow>
-            <TableHeaderCell className="w-[34%] py-3">Name</TableHeaderCell>
-            <TableHeaderCell className="w-[34%] py-3">Note</TableHeaderCell>
-            <TableHeaderCell className="w-[14%] py-3">Source</TableHeaderCell>
-            <TableHeaderCell className="w-[18%] py-3 text-right">
+            <TableHeaderCell className="py-3">Name</TableHeaderCell>
+            <TableHeaderCell className="py-3">Note</TableHeaderCell>
+            <TableHeaderCell className="py-3">Source</TableHeaderCell>
+            <TableHeaderCell className="py-3 text-right">
               Action
             </TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {rows.length > 0 ? (
-            rows.map((item) => (
-              <TableRow
-                key={item.id}
-                className="animate-[mfInboxPop_320ms_var(--mf-ease-spring)] transition-[background-color,border-color] duration-[var(--mf-duration-base)] hover:bg-[rgba(253,248,228,0.48)]"
-              >
-                <TableCell className="py-3.5 align-middle">
-                  <p className="text-ink font-semibold">{item.sender}</p>
-                  <p className="text-muted mt-0.5 text-sm leading-5">
-                    {item.address}
-                  </p>
-                </TableCell>
-                <TableCell className="py-3.5 align-middle">
-                  <p className="text-ink font-medium">{item.subject}</p>
-                  <p className="text-muted mt-0.5 text-sm leading-5">
-                    {item.snippet}
-                  </p>
-                </TableCell>
-                <TableCell className="py-3.5 align-middle">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-ink font-medium">
-                      {sourceLabel(item)}
-                    </span>
-                    <span
-                      className={cn(
-                        "inline-flex min-h-[28px] items-center gap-2 rounded-full border-[1.5px] px-2.5 text-xs font-semibold",
-                        item.isParsing
-                          ? "text-info-text border-[rgba(120,144,250,0.35)] bg-[var(--mf-color-blue-50)]"
-                          : "text-success-text border-[rgba(78,173,111,0.28)] bg-[var(--mf-color-green-50)]"
-                      )}
+            rows.map((item) => {
+              const isOpening = openingDraftId === item.id;
+
+              return (
+                <TableRow
+                  key={item.id}
+                  className="h-[108px] transition-[background-color,border-color] duration-[var(--mf-duration-base)] hover:bg-[rgba(253,248,228,0.48)]"
+                >
+                  <TableCell className="py-3.5 align-middle">
+                    <p className="text-ink truncate font-semibold">
+                      {item.sender}
+                    </p>
+                    <p className="text-muted mt-0.5 truncate text-sm leading-5">
+                      {item.address}
+                    </p>
+                  </TableCell>
+                  <TableCell className="py-3.5 align-middle">
+                    <p className="text-ink truncate font-medium">
+                      {item.subject}
+                    </p>
+                    <p className="text-muted mt-0.5 line-clamp-2 text-sm leading-5">
+                      {item.snippet}
+                    </p>
+                  </TableCell>
+                  <TableCell className="py-3.5 align-middle">
+                    <div className="flex items-center gap-2 whitespace-nowrap">
+                      <span className="text-ink font-medium">
+                        {sourceLabel(item)}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex min-h-[28px] items-center gap-2 rounded-full border-[1.5px] px-2.5 text-xs font-semibold",
+                          item.isParsing
+                            ? "text-info-text border-[rgba(120,144,250,0.35)] bg-[var(--mf-color-blue-50)]"
+                            : "text-success-text border-[rgba(78,173,111,0.28)] bg-[var(--mf-color-green-50)]"
+                        )}
+                      >
+                        {item.isParsing ? (
+                          <span
+                            aria-hidden="true"
+                            className="h-2 w-2 animate-pulse rounded-full bg-[var(--mf-color-blue-300)]"
+                          />
+                        ) : null}
+                        {item.isParsing ? "Parsing" : "Ready"}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-3.5 text-right align-middle">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      leading={
+                        isOpening ? (
+                          <span
+                            aria-hidden="true"
+                            className="h-2.5 w-2.5 animate-pulse rounded-full bg-[var(--mf-color-blue-300)]"
+                          />
+                        ) : (
+                          <MealfloIcon name="pencil-edit" size={18} />
+                        )
+                      }
+                      className="min-w-[96px]"
+                      disabled={item.isParsing || openingDraftId !== null}
+                      onClick={() => void openReview(item)}
                     >
-                      {item.isParsing ? (
-                        <span
-                          aria-hidden="true"
-                          className="h-2 w-2 animate-pulse rounded-full bg-[var(--mf-color-blue-300)]"
-                        />
-                      ) : null}
-                      {item.isParsing ? "Parsing" : "Ready"}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell className="py-3.5 text-right align-middle">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    leading={<MealfloIcon name="pencil-edit" size={18} />}
-                    disabled={item.isParsing}
-                    onClick={() => void openReview(item)}
-                  >
-                    {item.isParsing ? "Parsing" : "Review"}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))
+                      {isOpening
+                        ? "Opening"
+                        : item.isParsing
+                          ? "Parsing"
+                          : rowKind(item) === "other"
+                            ? "View"
+                            : "Review"}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })
           ) : (
             <TableRow>
-              <TableCell colSpan={4} className="text-muted py-8 text-center">
-                No {activeKind === "request" ? "client" : "driver"} requests are
-                waiting.
+              <TableCell
+                colSpan={4}
+                className="text-muted h-[324px] py-8 text-center align-middle"
+              >
+                No{" "}
+                {activeKind === "request"
+                  ? "client"
+                  : activeKind === "volunteer"
+                    ? "driver"
+                    : "manual triage"}{" "}
+                requests are waiting.
               </TableCell>
             </TableRow>
           )}
@@ -366,6 +480,7 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
           data={modalData}
           loadState={loadState}
           onClose={() => setModalData(null)}
+          onResolved={handleDraftResolved}
         />
       ) : null}
     </section>

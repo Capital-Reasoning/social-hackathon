@@ -673,13 +673,13 @@ export function DemoShell({
               <>
                 <aside
                   aria-label="Driver demo controls"
-                  className="hidden min-h-0 flex-col justify-center pr-8 lg:flex"
+                  className="hidden min-h-0 flex-col items-center justify-center px-8 lg:flex"
                 >
                   {driverControls}
                 </aside>
                 <div className="flex min-h-0 items-center justify-center lg:justify-center">
                   <div className="relative aspect-[2752/4195] h-[min(100%,calc(100vh-132px))] max-h-[860px] w-auto max-w-[min(88vw,590px)]">
-                    <div className="bg-bg absolute top-[4.9%] right-[16.7%] bottom-[4.2%] left-[16.7%] z-20 overflow-hidden rounded-[52px]">
+                    <div className="bg-bg absolute top-[4.5%] right-[17.25%] bottom-[4.8%] left-[17.25%] z-20 overflow-hidden rounded-[42px]">
                       {children}
                     </div>
                     <Image

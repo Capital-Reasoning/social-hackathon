@@ -62,7 +62,7 @@ export function parseServerEnv(raw: Record<string, string | undefined>) {
   const gmailIngestQuery =
     parsed.GMAIL_INGEST_QUERY && parsed.GMAIL_INGEST_QUERY.length > 0
       ? parsed.GMAIL_INGEST_QUERY
-      : `deliveredto:${gmailIngestToAddress} newer_than:30d`;
+      : `{deliveredto:${gmailIngestToAddress} to:${gmailIngestToAddress}} newer_than:30d`;
   const gmailIngestMaxResults = parsed.GMAIL_INGEST_MAX_RESULTS
     ? Number.parseInt(parsed.GMAIL_INGEST_MAX_RESULTS, 10)
     : 10;

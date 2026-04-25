@@ -719,7 +719,10 @@ async function parseWithOpenAi(source: RawIntakeSource) {
         {
           content:
             "You parse food-delivery public intake for Mealflo. Return JSON only. " +
-            "Classify as request, volunteer, or other. Make a best guess but list fields that need human review.",
+            "Classify as request, volunteer, or other. Make a best guess but list fields that need human review. " +
+            "For request.message and volunteer.message, include only useful operational notes for review: access instructions, buzzer/intercom/door details, parking, timing constraints, mobility needs, allergies or diet caveats, cold-chain constraints, route preferences, or safety notes. " +
+            "Do not include greetings, thanks, signatures, organization names, filler, or facts already captured in structured fields such as name, address, phone, email, household size, meal count, availability, vehicle access, stairs, or start area. " +
+            "If there are no extra operational notes, use exactly 'No extra access notes provided.' for requests or 'No extra route notes provided.' for volunteers.",
           role: "system",
         },
         {

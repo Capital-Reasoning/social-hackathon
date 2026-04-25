@@ -91,7 +91,13 @@ export function PublicFrame({
   );
 }
 
-export function PublicLandingView() {
+export function PublicLandingView({
+  requestHref = "/public/request",
+  volunteerHref = "/public/volunteer",
+}: {
+  requestHref?: string;
+  volunteerHref?: string;
+}) {
   return (
     <div className="flex w-full flex-1 flex-col lg:min-h-full">
       <section className="mf-enter flex min-h-full flex-1 items-center rounded-[24px] bg-[linear-gradient(180deg,rgba(250,226,120,0.24)_0%,rgba(255,255,255,0)_86%)] px-4 py-6 sm:px-6 lg:px-8">
@@ -112,14 +118,14 @@ export function PublicLandingView() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             <ActionPanel
-              ctaHref="/demo/public?view=request"
+              ctaHref={requestHref}
               ctaLabel="Request food"
               icon="meal-container"
               note="Tell us where support is needed and what kind of meals would help."
               title="Get food support"
             />
             <ActionPanel
-              ctaHref="/demo/public?view=volunteer"
+              ctaHref={volunteerHref}
               ctaLabel="Volunteer"
               icon="heart"
               note="Share when you are available and where you can start. We will match you with a route that fits."

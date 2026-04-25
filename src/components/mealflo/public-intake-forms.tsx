@@ -77,11 +77,77 @@ function fillFormFields(
   }
 }
 
-function tagsFromText(value: FormDataEntryValue | null) {
-  return String(value ?? "")
-    .split(/[,;\n]/)
-    .map((entry) => entry.trim().toLowerCase().replace(/\s+/g, "_"))
-    .filter(Boolean);
+function inferRequestConstraints(value: string) {
+  const text = value.toLowerCase();
+  const dietaryTags = new Set<string>();
+  const allergenFlags = new Set<string>();
+
+  if (/\b(low[-\s]?sodium|low[-\s]?salt|lower[-\s]?salt)\b/.test(text)) {
+    dietaryTags.add("low_sodium");
+  }
+
+  if (/\b(vegetarian|no meat)\b/.test(text)) {
+    dietaryTags.add("vegetarian");
+  }
+
+  if (/\bvegan\b/.test(text)) {
+    dietaryTags.add("vegan");
+  }
+
+  if (/\b(gluten[-\s]?free|celiac)\b/.test(text)) {
+    dietaryTags.add("gluten_free");
+  }
+
+  if (/\b(soft|pureed|minced|easy to chew)\b/.test(text)) {
+    dietaryTags.add("soft_food");
+  }
+
+  if (/\b(diabetic|diabetes)\b/.test(text)) {
+    dietaryTags.add("diabetic_friendly");
+  }
+
+  if (/\b(dairy[-\s]?free|lactose[-\s]?free)\b/.test(text)) {
+    dietaryTags.add("dairy_free");
+  }
+
+  if (/\bhalal\b/.test(text)) {
+    dietaryTags.add("halal");
+  }
+
+  if (/\bpeanut|peanuts|nut allergy|no nuts|tree nuts?\b/.test(text)) {
+    allergenFlags.add(
+      /\btree nuts?\b/.test(text) && !/\bpeanut/.test(text)
+        ? "tree_nut"
+        : "peanut"
+    );
+  }
+
+  if (/\bshellfish\b/.test(text)) {
+    allergenFlags.add("shellfish");
+  }
+
+  if (/\begg allergy|no eggs?\b/.test(text)) {
+    allergenFlags.add("egg");
+  }
+
+  if (/\b(fish allergy|no fish)\b/.test(text)) {
+    allergenFlags.add("fish");
+  }
+
+  if (/\b(wheat allergy|no wheat)\b/.test(text)) {
+    allergenFlags.add("wheat");
+  }
+
+  if (/\b(dairy allergy)\b/.test(text)) {
+    allergenFlags.add("dairy");
+  }
+
+  return {
+    allergenFlags: Array.from(allergenFlags),
+    coldChainRequired:
+      /\b(chilled|frozen|cold|refrigerated|fridge|cooler)\b/.test(text),
+    dietaryTags: Array.from(dietaryTags),
+  };
 }
 
 function parseAvailabilityText(value: FormDataEntryValue | null) {
@@ -275,15 +341,16 @@ export function PublicRequestForm() {
     const formData = new FormData(form);
     const name = splitName(formData.get("name"));
     const message = String(formData.get("message") ?? "").trim();
+    const constraints = inferRequestConstraints(message);
 
     try {
       const draftId = await submitJson("/api/intake/request", {
         ...name,
         ...contactFields(formData.get("contactMethod")),
         addressLine1: String(formData.get("address") ?? "").trim(),
-        allergenFlags: [],
-        coldChainRequired: false,
-        dietaryTags: tagsFromText(message),
+        allergenFlags: constraints.allergenFlags,
+        coldChainRequired: constraints.coldChainRequired,
+        dietaryTags: constraints.dietaryTags,
         dueBucket: formData.get("urgency") || "tomorrow",
         householdSize: 1,
         message: message || "No extra notes provided.",
@@ -447,9 +514,7 @@ export function PublicVolunteerForm() {
         hasVehicleAccess: formData.get("vehicleAccess") !== "none",
         homeArea: locationMatch?.[1]?.trim() ?? "",
         homeMunicipality: "Victoria",
-        message:
-          [availabilityDetails, message].filter(Boolean).join("\n") ||
-          "Volunteer can help with a short delivery route.",
+        message: message || "No extra route notes provided.",
         minutesAvailable: availability.minutesAvailable,
         windowEnd: availability.windowEnd,
         windowStart: availability.windowStart,

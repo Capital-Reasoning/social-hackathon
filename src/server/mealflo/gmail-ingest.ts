@@ -1,6 +1,11 @@
 import { serverEnv } from "@/lib/config/server-env";
 import { createGmailIntake } from "@/server/mealflo/backend";
 
+const ADMIN_GMAIL_SYNC_INTERVAL_MS = 5_000;
+
+let lastAdminGmailSyncAt = 0;
+let adminGmailSyncInFlight: Promise<void> | null = null;
+
 type GmailListResponse = {
   messages?: Array<{
     id: string;
@@ -199,8 +204,36 @@ export async function ingestConfiguredGmailMessages() {
     created: results.filter((result) => result.action === "created").length,
     duplicates: results.filter((result) => result.action === "duplicate")
       .length,
+    ignored: results.filter((result) => result.action === "ignored").length,
     query: serverEnv.gmailIngestQuery,
     results,
     skipped: results.filter((result) => result.action === "skipped").length,
   };
+}
+
+export async function syncConfiguredGmailForAdminInbox({
+  force = false,
+}: {
+  force?: boolean;
+} = {}) {
+  const now = Date.now();
+
+  if (!force && now - lastAdminGmailSyncAt < ADMIN_GMAIL_SYNC_INTERVAL_MS) {
+    return;
+  }
+
+  lastAdminGmailSyncAt = now;
+
+  if (!adminGmailSyncInFlight) {
+    adminGmailSyncInFlight = ingestConfiguredGmailMessages()
+      .then(() => undefined)
+      .catch((error) => {
+        console.warn("Mealflo Gmail sync skipped.", error);
+      })
+      .finally(() => {
+        adminGmailSyncInFlight = null;
+      });
+  }
+
+  await adminGmailSyncInFlight;
 }
