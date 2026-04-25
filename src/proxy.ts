@@ -1,23 +1,24 @@
 import { NextResponse, type NextRequest, userAgent } from "next/server";
 
-const DRIVER_PATH_PREFIXES = ["/driver", "/api/driver"];
-
-function isDriverPath(pathname: string) {
-  return DRIVER_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
-}
-
 function isPhoneRequest(request: NextRequest) {
   const { device } = userAgent(request);
 
   return device.type === "mobile";
 }
 
+export function shouldRedirectPhoneRootToDriver(
+  pathname: string,
+  isPhone: boolean
+) {
+  return isPhone && pathname === "/";
+}
+
 export function proxy(request: NextRequest) {
   const { nextUrl } = request;
 
-  if (!isPhoneRequest(request) || isDriverPath(nextUrl.pathname)) {
+  if (
+    !shouldRedirectPhoneRootToDriver(nextUrl.pathname, isPhoneRequest(request))
+  ) {
     return NextResponse.next();
   }
 
