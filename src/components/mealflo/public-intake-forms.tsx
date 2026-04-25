@@ -207,20 +207,20 @@ function SubmitStatus({ state }: { state: SubmitState }) {
 
 function DemoGeneratePrompt({ onGenerate }: { onGenerate: () => void }) {
   return (
-    <div className="border-action flex flex-col gap-5 rounded-[18px] border-2 bg-[var(--mf-color-blue-50)] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5 md:col-span-2">
-      <div className="flex min-w-0 items-center gap-4">
+    <div className="border-action flex flex-col gap-4 rounded-[16px] border-[1.5px] bg-[var(--mf-color-blue-50)] p-4 sm:flex-row sm:items-center sm:justify-between md:col-span-2">
+      <div className="flex min-w-0 items-center gap-3">
         <IconSwatch
           framed
           name="star"
-          size={36}
-          swatchSize={64}
+          size={30}
+          swatchSize={54}
           tone="action"
         />
         <div className="min-w-0">
-          <p className="font-display text-ink text-[clamp(1.45rem,2.4vw,1.9rem)] leading-tight font-bold tracking-[-0.02em]">
+          <p className="font-display text-ink text-[clamp(1.25rem,2vw,1.55rem)] leading-tight font-bold tracking-[-0.02em]">
             Sample details
           </p>
-          <p className="text-muted mt-1 text-base leading-6">
+          <p className="text-muted mt-1 text-[15px] leading-6">
             Use realistic Victoria details for a quick entry.
           </p>
         </div>
@@ -228,13 +228,13 @@ function DemoGeneratePrompt({ onGenerate }: { onGenerate: () => void }) {
       <Button
         type="button"
         variant="primary"
-        className="h-[76px] min-w-[300px] shrink-0 gap-3 rounded-[16px] px-9 leading-none shadow-[0_10px_24px_rgba(61,92,245,0.2)]"
+        className="h-[60px] min-w-[210px] shrink-0 gap-2.5 rounded-[14px] px-6 leading-none shadow-[0_8px_18px_rgba(61,92,245,0.16)]"
         style={{
-          fontSize: "clamp(1.7rem, 2.5vw, 2.1rem)",
-          fontWeight: 800,
+          fontSize: "clamp(1.25rem, 2vw, 1.45rem)",
+          fontWeight: 750,
         }}
         onClick={onGenerate}
-        leading={<MealfloIcon name="pencil-edit" size={36} />}
+        leading={<MealfloIcon name="pencil-edit" size={28} />}
       >
         Generate
       </Button>

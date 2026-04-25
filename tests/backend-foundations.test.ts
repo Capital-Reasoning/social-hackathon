@@ -5,6 +5,7 @@ import { getDb } from "@/server/db/client";
 import {
   approveDraft,
   approveRoute,
+  completeDriverStop,
   createGmailIntake,
   createRequestIntake,
   createVolunteerIntake,
@@ -14,6 +15,7 @@ import {
   getAdminInventoryData,
   getAdminInboxData,
   getAdminRoutesData,
+  getDriverActiveData,
   getDriverOfferData,
   markDraftOther,
   heartbeatDriverSession,
@@ -39,7 +41,11 @@ import {
   volunteers,
 } from "@/server/db/schema";
 
-describe.sequential("backend foundations", () => {
+const describeWithTestDatabase = process.env.NEON_DATABASE_URL
+  ? describe.sequential
+  : describe.sequential.skip;
+
+describeWithTestDatabase("backend foundations", () => {
   beforeEach(async () => {
     await seedDemoData();
   });
@@ -636,6 +642,45 @@ describe.sequential("backend foundations", () => {
 
     expect(route.deliveredCount).toBe(0);
     expect(route.remainingCount).toBe(route.stopCount);
+  });
+
+  it("treats could-not-deliver stops as completed progress", async () => {
+    const db = getDb();
+
+    await resetRouteSession({ routeId: "route-victoria-core" });
+
+    const session = await startDriverSession({
+      deviceFingerprint: "could-not-deliver-phone",
+      routeId: "route-victoria-core",
+      volunteerId: "volunteer-rosa-martinez",
+    });
+    const stopRows = await db
+      .select()
+      .from(routeStops)
+      .where(eq(routeStops.routeId, "route-victoria-core"));
+    const [firstStop] = stopRows.sort(
+      (left, right) => left.sequence - right.sequence
+    );
+
+    if (!firstStop) {
+      throw new Error("Expected route-victoria-core to have at least one stop.");
+    }
+
+    await completeDriverStop({
+      sessionId: session.id,
+      status: "could_not_deliver",
+      stopId: firstStop.id,
+    });
+
+    const active = await getDriverActiveData("route-victoria-core");
+    const [route] = await db
+      .select()
+      .from(routes)
+      .where(eq(routes.id, "route-victoria-core"));
+
+    expect(active.currentStop.id).not.toBe(firstStop.id);
+    expect(route.deliveredCount).toBe(0);
+    expect(route.remainingCount).toBe(route.stopCount - 1);
   });
 
   it("shows one live driver marker per route when duplicate phones join", async () => {

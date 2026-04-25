@@ -1031,6 +1031,14 @@ function toRouteStatus(
   return route.warnings.length > 0 ? "attention" : "ready";
 }
 
+function isTerminalRouteStopStatus(status: typeof routeStops.$inferSelect.status) {
+  return (
+    status === "delivered" ||
+    status === "could_not_deliver" ||
+    status === "skipped"
+  );
+}
+
 const requestStatusLabels: Record<TriageRequestCard["status"], string> = {
   approved: "Ready",
   assigned: "Routed",
@@ -1293,7 +1301,8 @@ function buildLiveMarkers(
       routeSessions[0];
     const nextStop = stopRows
       .filter(
-        (entry) => entry.routeId === route.id && entry.status !== "delivered"
+        (entry) =>
+          entry.routeId === route.id && !isTerminalRouteStopStatus(entry.status)
       )
       .sort((left, right) => left.sequence - right.sequence)[0];
 
@@ -3358,12 +3367,16 @@ export async function heartbeatDriverSession(
       input.deliveredCountLocal,
       route?.stopCount ?? input.deliveredCountLocal
     );
+    const completedCount = Math.min(
+      input.currentStopIndex,
+      route?.stopCount ?? input.currentStopIndex
+    );
 
     await database
       .update(routes)
       .set({
         deliveredCount,
-        remainingCount: sql`${routes.stopCount} - ${deliveredCount}`,
+        remainingCount: sql`${routes.stopCount} - ${completedCount}`,
         lastActivityAt: now,
         status: "in_progress",
         updatedAt: now,
@@ -3487,23 +3500,22 @@ export async function completeDriverStop(
     throw new Error(`Route stop ${input.stopId} was not found.`);
   }
 
-  const deliveredStops = await database
-    .select({ count: sql<number>`count(*)` })
+  const stopProgress = await database
+    .select({
+      completedCount: sql<number>`count(*) filter (where ${routeStops.status} in ('delivered', 'could_not_deliver', 'skipped'))`,
+      deliveredCount: sql<number>`count(*) filter (where ${routeStops.status} = 'delivered')`,
+    })
     .from(routeStops)
-    .where(
-      and(
-        eq(routeStops.routeId, session.routeId),
-        eq(routeStops.status, "delivered")
-      )
-    );
+    .where(eq(routeStops.routeId, session.routeId));
 
-  const deliveredCount = Number(deliveredStops[0]?.count ?? 0);
+  const deliveredCount = Number(stopProgress[0]?.deliveredCount ?? 0);
+  const completedCount = Number(stopProgress[0]?.completedCount ?? 0);
 
   await database
     .update(routes)
     .set({
       deliveredCount,
-      remainingCount: sql`${routes.stopCount} - ${deliveredCount}`,
+      remainingCount: sql`${routes.stopCount} - ${completedCount}`,
       lastActivityAt: now,
       status: "in_progress",
       updatedAt: now,
@@ -4338,7 +4350,8 @@ export async function getDriverActiveData(
   const currentStop = graph.stopRows
     .filter(
       (entry) =>
-        entry.routeId === activeRoute.id && entry.status !== "delivered"
+        entry.routeId === activeRoute.id &&
+        !isTerminalRouteStopStatus(entry.status)
     )
     .sort((left, right) => left.sequence - right.sequence)[0];
   const client = graph.clientRows.find(

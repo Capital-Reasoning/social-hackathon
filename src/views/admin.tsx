@@ -244,7 +244,7 @@ function SummaryStatusStrip({
   }>;
 }) {
   return (
-    <section className="border-line rounded-[16px] border-[1.5px] bg-white px-4 py-10 sm:px-5">
+    <section className="border-line rounded-[16px] border-[1.5px] bg-white px-4 py-6 sm:px-5">
       <div
         className={`grid divide-y divide-[rgba(24,24,60,0.08)] sm:grid-cols-2 sm:divide-y-0 xl:divide-x ${
           items.length === 3 ? "xl:grid-cols-3" : "xl:grid-cols-4"

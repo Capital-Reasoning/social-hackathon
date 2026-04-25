@@ -235,6 +235,22 @@ def hero_metrics(c: canvas.Canvas, x: float, y: float, w: float, h: float) -> No
         text(c, sub, cx + 45, y + h - 38, 7.4, "DMSans", P.muted)
 
 
+def hero_flow(c: canvas.Canvas, x: float, y: float, w: float, h: float) -> None:
+    round_rect(c, x, y, w, h, 18, P.blue_tint, P.line)
+    items = ["Requests", "Meals", "Routes", "Delivery"]
+    item_w = 54
+    gap = (w - (len(items) * item_w)) / (len(items) - 1)
+    start_x = x + 18
+    for idx, item in enumerate(items):
+        bx = start_x + idx * (item_w + gap)
+        round_rect(c, bx, y + 24, item_w, 24, 12, P.surface, P.line)
+        text(c, item, bx + item_w / 2, y + 33, 7.8, "DMSans", P.navy, "center")
+        if idx < len(items) - 1:
+            stroke(c, P.line_strong)
+            c.line(bx + item_w, y + 36, bx + item_w + gap, y + 36)
+    text(c, "Structured work from intake to doorstep", x + w / 2, y + 9, 8.2, "DMSans", P.muted, "center")
+
+
 def page_one(c: canvas.Canvas) -> None:
     top_bar(c)
     content_top = PAGE_H - 120
@@ -247,7 +263,7 @@ def page_one(c: canvas.Canvas) -> None:
     text(c, "Mealflo Hackathon Writeup", x + 22, content_top - 78, 27, "Outfit", P.navy)
     paragraph(
         c,
-        "A working coordination app for turning intake, inventory, volunteer availability, and delivery constraints into safer food support routes.",
+        "A food support delivery app that turns requests, meal inventory, volunteer capacity, and delivery constraints into safer routes.",
         x + 24,
         content_top - 102,
         400,
@@ -256,7 +272,7 @@ def page_one(c: canvas.Canvas) -> None:
         P.muted,
         13,
     )
-    hero_metrics(c, x + 494, content_top - 104, w - 516, 70)
+    hero_flow(c, x + 494, content_top - 104, w - 516, 70)
 
     section_y = content_top - 154
     col_w = (w - 28) / 2
@@ -267,7 +283,7 @@ def page_one(c: canvas.Canvas) -> None:
     text(c, "Track chosen and problem tackled", x + 54, section_y - 42, 12.6, "Outfit", P.navy)
     paragraph(
         c,
-        "We chose Track 2: Food Security Delivery Operations. We tackled the coordination problem faced by volunteer-led food delivery programs, where incoming food requests, volunteer availability, meal inventory, routes, client needs, allergies, cold-chain requirements, accessibility constraints, and delivery status all have to be managed at the same time.\n\nOur focus was helping a frontline coordinator turn scattered intake, inventory, and volunteer information into safe, assigned delivery routes with less manual work and fewer missed details - supported by a guided delivery system for volunteer drivers.",
+        "We chose Track 2: Food Security Delivery Operations. We tackled the coordination problem faced by volunteer-led food delivery programs that manage food requests, meal inventory, volunteer availability, allergies, accessibility constraints, cold-chain needs, routes, and delivery status across forms, spreadsheets, messages, phone calls, and memory.\n\nMealflo reduces that burden by making requests, constraints, routes, driver assignments, and delivery progress visible in one place.",
         x + 16,
         section_y - 62,
         col_w - 32,
@@ -282,7 +298,7 @@ def page_one(c: canvas.Canvas) -> None:
     text(c, "What we built", x2 + 54, section_y - 42, 12.6, "Outfit", P.navy)
     paragraph(
         c,
-        "We built Mealflo, a web application for food support delivery operations. It connects public intake, admin coordination, and a volunteer driver experience, backed by a database layer, route calculation, map-based coordination, and language-model-assisted processing for intake and inventory workflows.",
+        "We built Mealflo, a working web app for coordinating food support delivery operations. It connects public intake, coordinator operations, and a phone-first volunteer driver experience, backed by a database layer, map-based routing, inventory awareness, and OpenAI-assisted parsing for intake and inventory workflows.",
         x2 + 16,
         section_y - 62,
         col_w - 32,
@@ -299,17 +315,17 @@ def page_one(c: canvas.Canvas) -> None:
         (
             "person-plus.png",
             "Public intake",
-            "Clients request food support and volunteers sign up to deliver meals. The system captures address, meal count, timing, dietary needs, allergies, availability, vehicle access, cooler capacity, and mobility constraints.",
+            "Recipients request food support and volunteers offer to deliver. Mealflo captures address, meal count, timing, dietary needs, allergies, mobility constraints, vehicle access, and cooler capacity.",
         ),
         (
             "grocery-bag.png",
-            "Admin operations dashboard",
-            "Coordinators review incoming requests, manage client records, view inventory, create routes, assign drivers, and track progress from one operational picture of what needs to happen today.",
+            "Coordinator dashboard",
+            "Coordinators review intake, approve structured drafts, check inventory, generate routes, assign drivers, and monitor progress from one operational view.",
         ),
         (
             "phone-handset.png",
             "Volunteer driver view",
-            "Drivers use a phone-friendly interface to see assigned routes, follow directions one stop at a time, view delivery notes, notify clients, and mark deliveries complete.",
+            "Drivers choose availability, accept a suggested route, see each stop with delivery notes and meal details, follow the map, and mark stops complete.",
         ),
     ]
     lane_w = w / 3
@@ -350,7 +366,6 @@ def draw_map(c: canvas.Canvas, x: float, y: float, w: float, h: float) -> None:
         c.circle(px, py, 5.5, stroke=0, fill=1)
     c.restoreState()
     text(c, "0 active", x + 14, y + 12, 8, "DMSans", P.navy)
-    text(c, "updates as stops complete", x + w - 14, y + 12, 7.2, "DMSans", P.muted, "right")
 
 
 def workflow_step(
@@ -379,7 +394,7 @@ def page_two(c: canvas.Canvas) -> None:
     text(c, "How a frontline operator would use it on a real Monday morning", x, title_y - 28, 19.6, "Outfit", P.navy)
     paragraph(
         c,
-        "The workflow is intentionally low-cognitive-load: review requests, check constraints, assign routes, load meals, guide drivers, and track completion.",
+        "A frontline coordinator opening Mealflo on a busy Monday can move from scattered information to an actionable delivery plan.",
         x,
         title_y - 48,
         520,
@@ -391,39 +406,40 @@ def page_two(c: canvas.Canvas) -> None:
 
     left_w = 510
     right_x = x + left_w + 28
-    start_y = 360
+    start_y = 336
     row_gap = 30
     col_gap = 28
     step_w = (left_w - col_gap) / 2
     step_h = 86
-    round_rect(c, x - 10, 110, left_w + 20, 312, 18, P.surface, P.line)
+    round_rect(c, x - 10, 86, left_w + 20, 336, 18, P.surface, P.line)
     stroke(c, P.line)
-    c.line(x + step_w + col_gap / 2, 130, x + step_w + col_gap / 2, 402)
-    c.line(x + 20, 262, x + left_w - 20, 262)
+    c.line(x + step_w + col_gap / 2, 108, x + step_w + col_gap / 2, 402)
+    c.line(x + 20, 306, x + left_w - 20, 306)
+    c.line(x + 20, 190, x + left_w - 20, 190)
     steps = [
         (
-            "Review recent requests",
-            "Instead of searching through emails, forms, spreadsheets, and messages, the coordinator sees intake in one place with address, quantity, urgency, dietary needs, allergies, mobility needs, and delivery notes.",
+            "Review new requests",
+            "Instead of searching through emails, forms, spreadsheets, and messages, the coordinator sees incoming requests with address, meal count, urgency, dietary needs, allergies, mobility needs, and delivery notes.",
         ),
         (
-            "Check available inventory",
-            "They see which meals or staples are ready for delivery. Entries can be made manually or through uploading a receipt, with meals tagged by allergens or dietary restrictions.",
+            "Approve structured intake",
+            "Mealflo helps turn intake messages into structured drafts. The coordinator reviews the original request, checks parsed details, and approves delivery work.",
         ),
         (
-            "Review volunteer availability",
-            "Mealflo captures driver constraints such as available time, starting location, vehicle access, cooler capacity, stair comfort, and other limitations.",
+            "Check meals and drivers",
+            "The coordinator sees which meals are ready and which volunteers are available, including time windows, vehicle access, cooler capacity, stair comfort, and other limits.",
         ),
         (
-            "Review generated routes",
-            "Deliveries are grouped into routes that consider urgency, driver capacity, and food requirements. The coordinator assigns a driver and confirms meals to load.",
+            "Generate routes",
+            "Deliveries are grouped into route suggestions based on urgency, inventory, location, driver capacity, and food requirements. The coordinator assigns a driver and confirms what to load.",
         ),
         (
             "Guide the driver",
-            "The driver mobile view shows the next stop, address, meals to deliver, delivery notes, and a simple completion button.",
+            "The driver mobile view shows the next stop, address, meals to deliver, delivery notes, map guidance, and a simple completion action.",
         ),
         (
             "Track completion",
-            "As stops are completed, the dashboard updates so the operator can see what is out for delivery, complete, and needing follow-up without calling every driver.",
+            "As stops are completed, the dashboard updates so the coordinator can see what is out for delivery, complete, delayed, or needing follow-up without calling every driver.",
         ),
     ]
     for idx, (title, body) in enumerate(steps, 1):
@@ -463,7 +479,7 @@ def page_two(c: canvas.Canvas) -> None:
     text(c, "Intended result", x + 58, 70, 12, "Outfit", P.navy)
     paragraph(
         c,
-        "A lower-cognitive-load operating rhythm for frontline food support: every request, constraint, route, driver update, and follow-up action is visible in one place.",
+        "Mealflo gives frontline coordinators a calmer operating rhythm: requests, constraints, meal availability, routes, driver updates, and follow-up actions are visible in one place.",
         x + 188,
         72,
         w - 220,
@@ -487,7 +503,7 @@ def page_three(c: canvas.Canvas) -> None:
     text(c, "What we would ship next with one more week", x + 22, hero_y + 38, 19.4, "Outfit", P.navy)
     paragraph(
         c,
-        "With one more week, we would focus on expanding communication channels and improving real-world delivery coordination.",
+        "With one more week, we would focus on making Mealflo easier to use in real community operations.",
         x + 22,
         hero_y + 18,
         560,
@@ -504,20 +520,20 @@ def page_three(c: canvas.Canvas) -> None:
         (
             "01",
             "person-plus.png",
-            "Connect additional intake sources",
-            "Many food support requests do not arrive through a formal web form. They may come through Instagram, Facebook, text message, or direct messages to the organization. We would add these as intake channels so Mealflo can capture requests from the places people already use.",
+            "Additional intake channels",
+            "Food support requests often come through Instagram, Facebook, text messages, voicemail, email, or direct messages rather than a formal web form. We would add more intake channels so teams can capture requests from the places people already use.",
         ),
         (
             "02",
             "phone-handset.png",
-            "Add real text messaging",
-            "Drivers need simple communication tools during delivery. We would add real text messaging from the driver flow, so a driver could send a genuine SMS through the app using a pre-written message such as: \"Hi, this is your meal delivery driver. I'm outside now.\"",
+            "Real SMS communication",
+            "Drivers need simple, reliable communication during deliveries. We would add real text messaging from the driver flow, including pre-written messages like: \"Hi, this is your meal delivery driver. I'm outside now.\"",
         ),
         (
             "03",
             "chat-bubble.png",
-            "Get field data from a real organization",
-            "Finally, we would get field data from a real organization. That would let us test Mealflo against real intake patterns, delivery constraints, volunteer workflows, and communication needs, so the next version is shaped by frontline operations rather than guided and educated assumptions.",
+            "Field testing with a real organization",
+            "We would work with a real food support organization to test Mealflo against actual intake patterns, route constraints, volunteer workflows, and communication needs, so the next version is shaped by frontline reality instead of demo assumptions.",
         ),
     ]
     col_w = w / 3
@@ -538,7 +554,7 @@ def page_three(c: canvas.Canvas) -> None:
     label(c, "Mealflo in one line", x + 22, band_y + 48)
     paragraph(
         c,
-        "A practical coordination layer for food support delivery teams: intake becomes structured, constraints become visible, routes become assignable, and drivers get guided execution on the phone.",
+        "Mealflo turns food support requests, meal inventory, volunteer capacity, and delivery constraints into safer routes and a clearer delivery workflow.",
         x + 22,
         band_y + 26,
         500,

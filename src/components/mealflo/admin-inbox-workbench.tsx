@@ -157,7 +157,7 @@ function RequestReviewModal({
               )}
             >
               {showSource ? (
-                <section className="min-w-0 space-y-5">
+                <section className="grid min-w-0 content-start gap-6">
                   <h4 className="font-display text-ink text-[22px] font-semibold">
                     {sourceTitle}
                   </h4>
@@ -167,7 +167,7 @@ function RequestReviewModal({
                 </section>
               ) : null}
 
-              <section className="min-w-0 space-y-5">
+              <section className="grid min-w-0 content-start gap-6">
                 <h4 className="font-display text-ink text-[22px] font-semibold">
                   Parsed fields
                 </h4>
