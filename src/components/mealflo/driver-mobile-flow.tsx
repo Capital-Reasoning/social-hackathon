@@ -1945,7 +1945,7 @@ function DriverMobileFlowReady({
 
   if (screen === "availability") {
     return (
-      <section className="mf-enter flex min-h-0 flex-1 flex-col overflow-hidden">
+      <section className="mf-enter flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
         <p className="sr-only" role="status">
           {statusText}
         </p>
