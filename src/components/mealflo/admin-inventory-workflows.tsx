@@ -9,6 +9,7 @@ import { CardHeader } from "@/components/mealflo/card";
 import { Field, Input, Select, Textarea } from "@/components/mealflo/field";
 import { MealfloIcon } from "@/components/mealflo/icon";
 import { ModalLayer } from "@/components/mealflo/modal-layer";
+import { inventoryAcceptedEventName } from "@/components/mealflo/admin-inventory-tables";
 import {
   formatInventoryLabel,
   ingredientSourceTypes,
@@ -348,10 +349,19 @@ export function AdminInventoryWorkflows({
       });
       const payload = (await response.json()) as ApiResponse<{ id: string }>;
 
-      if (!response.ok || !payload.ok) {
+      if (!response.ok || !payload.ok || !payload.data) {
         throw new Error(payload.error ?? "Draft item could not be confirmed.");
       }
 
+      window.dispatchEvent(
+        new CustomEvent(inventoryAcceptedEventName, {
+          detail: {
+            id: payload.data.id,
+            item,
+            sourceNote: receiptSourceNote || "Manual receipt",
+          },
+        })
+      );
       setConfirmedKeys((current) => new Set(current).add(key));
       setParseStatus(`${item.name} confirmed and saved.`);
       router.refresh();

@@ -2,6 +2,7 @@ import { Badge } from "@/components/mealflo/badge";
 import { AdminDeliveriesToggle } from "@/components/mealflo/admin-deliveries-toggle";
 import { AdminDirectoryTable } from "@/components/mealflo/admin-directory-table";
 import { AdminInboxWorkbench } from "@/components/mealflo/admin-inbox-workbench";
+import { AdminInventoryTables } from "@/components/mealflo/admin-inventory-tables";
 import { AdminInventoryWorkflows } from "@/components/mealflo/admin-inventory-workflows";
 import { AdminLiveMap } from "@/components/mealflo/admin-live-map";
 import { TodayRouteList } from "@/components/mealflo/admin-today-routes";
@@ -735,107 +736,7 @@ export async function AdminInventoryView() {
         dietaryTagOptions={dietaryTagOptions}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(520px,0.95fr)]">
-        <section className="space-y-3">
-          <DashboardSectionHeader
-            title="Deliverable meals"
-            note="Named meal items are the only food layer used by route allocation and drivers."
-          />
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeaderCell>Meal</TableHeaderCell>
-                <TableHeaderCell>Category</TableHeaderCell>
-                <TableHeaderCell>Quantity</TableHeaderCell>
-                <TableHeaderCell>Status</TableHeaderCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.meals.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <div className="min-w-[220px]">
-                      <p className="text-ink text-[17px] font-semibold">
-                        {item.name}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted">{item.category}</TableCell>
-                  <TableCell className="font-display text-lg font-semibold">
-                    {item.quantity}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {item.status === "low" ? (
-                        <Badge size="sm" tone="warning">
-                          Low
-                        </Badge>
-                      ) : null}
-                      {item.tags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          size="sm"
-                          tone={
-                            /fridge|refrigeration/i.test(tag)
-                              ? "info"
-                              : "neutral"
-                          }
-                        >
-                          {displayKitchenLabel(tag)}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </section>
-
-        <section className="space-y-3">
-          <DashboardSectionHeader
-            title="Ingredients"
-            note="Ingredient stock stays out of driver loadouts and sorts by confirmed perishability."
-          />
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeaderCell>Ingredient</TableHeaderCell>
-                <TableHeaderCell>Quantity</TableHeaderCell>
-                <TableHeaderCell>Storage</TableHeaderCell>
-                <TableHeaderCell>Source</TableHeaderCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.ingredients.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <div className="min-w-[220px]">
-                      <p className="text-ink text-[17px] font-semibold">
-                        {item.name}
-                      </p>
-                    </div>
-                  </TableCell>
-                  <TableCell>{item.quantity}</TableCell>
-                  <TableCell>
-                    {item.perishability === "Use today" ||
-                    item.refrigerated ? (
-                      <Badge size="sm" tone="warning">
-                        {displayKitchenLabel(item.perishability)}
-                      </Badge>
-                    ) : (
-                      <span className="border-line text-muted inline-flex h-7 items-center rounded-full border-[1.5px] bg-white px-2.5 text-xs font-semibold">
-                        {displayKitchenLabel(item.perishability)}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted">{item.source}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </section>
-      </div>
+      <AdminInventoryTables ingredients={data.ingredients} meals={data.meals} />
     </div>
   );
 }
