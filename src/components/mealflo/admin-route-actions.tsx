@@ -27,6 +27,9 @@ type AdminRouteActionsProps = {
 
 type ActiveDialog = "assign" | "stops" | null;
 
+const detailSectionHeadingClass =
+  "font-display text-ink pb-1 text-[24px] leading-tight font-semibold tracking-[-0.01em]";
+
 export function AdminRouteActions({
   activeStopIds,
   currentDriver,
@@ -91,29 +94,32 @@ export function AdminRouteActions({
 
   return (
     <div className="grid content-start gap-4">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant="primary"
-          leading={<MealfloIcon name="person-check" size={24} />}
-          onClick={openAssignDialog}
-        >
-          {assignLabel}
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          leading={<MealfloIcon name="route-stops" size={22} />}
-          onClick={openStopsDialog}
-        >
-          Adjust stops
-        </Button>
+      <div className="grid gap-2">
+        <h4 className={detailSectionHeadingClass}>Actions</h4>
+        <div className="grid gap-2">
+          <Button
+            fullWidth
+            size="sm"
+            variant="primary"
+            leading={<MealfloIcon name="person-check" size={24} />}
+            onClick={openAssignDialog}
+          >
+            {assignLabel}
+          </Button>
+          <Button
+            fullWidth
+            size="sm"
+            variant="secondary"
+            leading={<MealfloIcon name="route-stops" size={22} />}
+            onClick={openStopsDialog}
+          >
+            Adjust stops
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-2">
-        <p className="text-muted text-xs font-semibold tracking-[0.08em] uppercase">
-          Route details
-        </p>
+        <h4 className={detailSectionHeadingClass}>Route details</h4>
         <div className="flex flex-wrap gap-1.5">
           {requirements.map((requirement) => (
             <Badge
@@ -126,11 +132,6 @@ export function AdminRouteActions({
               }
             >
               {requirement}
-            </Badge>
-          ))}
-          {warnings.map((warning) => (
-            <Badge key={warning} size="sm" tone="warning">
-              {warning}
             </Badge>
           ))}
         </div>
@@ -151,6 +152,18 @@ export function AdminRouteActions({
             {selectedStops.length} active
           </span>
         </p>
+        {warnings.length > 0 ? (
+          <div className="border-line/70 mt-2 rounded-[12px] border-[1.5px] bg-white/70 px-3 py-2">
+            <p className="text-muted text-xs font-semibold">Notes</p>
+            <div className="mt-1 grid gap-1">
+              {warnings.map((warning) => (
+                <p key={warning} className="text-ink text-sm leading-5">
+                  {warning}
+                </p>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {activeDialog ? (

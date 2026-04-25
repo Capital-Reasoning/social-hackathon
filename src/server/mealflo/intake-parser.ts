@@ -445,7 +445,7 @@ function fallbackVolunteerParse(source: RawIntakeSource): ParsedIntakeDraft {
   const homeArea =
     cleanText(
       searchable.match(
-        /\b(?:starting|start|based|area|neighbourhood|neighborhood)\s+(?:in|near|around)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i
+        /\b(?:starting|start|based|area|neighbourhood|neighborhood)(?:\s+area)?\s*:?\s*(?:in|near|around)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i
       )?.[1]
     ) || homeMunicipality;
   const lowConfidenceFields = [
@@ -711,6 +711,8 @@ async function parseWithOpenAi(source: RawIntakeSource) {
     return null;
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
   const response = await fetch("https://api.openai.com/v1/responses", {
     body: JSON.stringify({
       input: [
@@ -751,7 +753,8 @@ async function parseWithOpenAi(source: RawIntakeSource) {
       "Content-Type": "application/json",
     },
     method: "POST",
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
 
   if (!response.ok) {
     return null;

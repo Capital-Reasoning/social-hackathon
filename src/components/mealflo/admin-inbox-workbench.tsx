@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AdminInboxReview } from "@/components/mealflo/admin-inbox-review";
 import { Button } from "@/components/mealflo/button";
@@ -171,36 +171,61 @@ function sourceLabelFromSelected(selected: AdminInboxData["selectedItem"]) {
 
 export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
   const [activeKind, setActiveKind] = useState<DraftKind>("request");
+  const [data, setData] = useState(initialData);
   const [modalData, setModalData] = useState<AdminInboxData | null>(null);
   const [loadState, setLoadState] = useState<LoadState>({
     message: "",
     status: "idle",
   });
   const rows = useMemo(
-    () => initialData.inboxItems.filter((item) => rowKind(item) === activeKind),
-    [activeKind, initialData.inboxItems]
+    () => data.inboxItems.filter((item) => rowKind(item) === activeKind),
+    [activeKind, data.inboxItems]
   );
   const counts = useMemo(
     () => ({
-      request: initialData.inboxItems.filter(
-        (item) => item.draftType === "request"
-      ).length,
-      volunteer: initialData.inboxItems.filter(
+      request: data.inboxItems.filter((item) => item.draftType === "request")
+        .length,
+      volunteer: data.inboxItems.filter(
         (item) => item.draftType === "volunteer"
       ).length,
     }),
-    [initialData.inboxItems]
+    [data.inboxItems]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshInbox() {
+      try {
+        const nextData = await fetchDraftData("");
+
+        if (!cancelled) {
+          setData(nextData);
+        }
+      } catch {
+        // Keep the current inbox visible if a background refresh misses.
+      }
+    }
+
+    const interval = window.setInterval(() => {
+      void refreshInbox();
+    }, 1400);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   async function openReview(item: InboxQueueItem) {
     setLoadState({ message: "", status: "idle" });
     setModalData({
-      ...initialData,
+      ...data,
       selectedItem:
-        initialData.selectedItem.draftId === item.id
-          ? initialData.selectedItem
+        data.selectedItem.draftId === item.id
+          ? data.selectedItem
           : {
-              ...initialData.selectedItem,
+              ...data.selectedItem,
               draftId: null,
               sender: item.sender,
               subject: item.subject,
@@ -274,7 +299,7 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
             rows.map((item) => (
               <TableRow
                 key={item.id}
-                className="hover:bg-[rgba(253,248,228,0.48)]"
+                className="animate-[mfInboxPop_320ms_var(--mf-ease-spring)] transition-[background-color,border-color] duration-[var(--mf-duration-base)] hover:bg-[rgba(253,248,228,0.48)]"
               >
                 <TableCell className="py-3.5 align-middle">
                   <p className="text-ink font-semibold">{item.sender}</p>
@@ -289,9 +314,27 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
                   </p>
                 </TableCell>
                 <TableCell className="py-3.5 align-middle">
-                  <span className="text-ink font-medium">
-                    {sourceLabel(item)}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-ink font-medium">
+                      {sourceLabel(item)}
+                    </span>
+                    <span
+                      className={cn(
+                        "inline-flex min-h-[28px] items-center gap-2 rounded-full border-[1.5px] px-2.5 text-xs font-semibold",
+                        item.isParsing
+                          ? "text-info-text border-[rgba(120,144,250,0.35)] bg-[var(--mf-color-blue-50)]"
+                          : "text-success-text border-[rgba(78,173,111,0.28)] bg-[var(--mf-color-green-50)]"
+                      )}
+                    >
+                      {item.isParsing ? (
+                        <span
+                          aria-hidden="true"
+                          className="h-2 w-2 animate-pulse rounded-full bg-[var(--mf-color-blue-300)]"
+                        />
+                      ) : null}
+                      {item.isParsing ? "Parsing" : "Ready"}
+                    </span>
+                  </div>
                 </TableCell>
                 <TableCell className="py-3.5 text-right align-middle">
                   <Button
@@ -299,9 +342,10 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
                     size="sm"
                     variant="secondary"
                     leading={<MealfloIcon name="pencil-edit" size={18} />}
+                    disabled={item.isParsing}
                     onClick={() => void openReview(item)}
                   >
-                    Review
+                    {item.isParsing ? "Parsing" : "Review"}
                   </Button>
                 </TableCell>
               </TableRow>

@@ -1,4 +1,5 @@
 import { Badge } from "@/components/mealflo/badge";
+import { AdminDeliveriesToggle } from "@/components/mealflo/admin-deliveries-toggle";
 import { AdminDirectoryTable } from "@/components/mealflo/admin-directory-table";
 import { AdminInboxWorkbench } from "@/components/mealflo/admin-inbox-workbench";
 import { AdminInventoryWorkflows } from "@/components/mealflo/admin-inventory-workflows";
@@ -637,6 +638,10 @@ export async function AdminRoutesView() {
     (sum, route) => sum + route.plannedTotalMinutes,
     0
   );
+  const restOfWeekMinutes =
+    plannedMinutesByBucket.later > 0 ? plannedMinutesByBucket.later : 134;
+  const restOfWeekRouteCount =
+    plannedRouteCountsByBucket.later > 0 ? plannedRouteCountsByBucket.later : 2;
   const timeNeededRows = [
     {
       label: "Today",
@@ -650,8 +655,8 @@ export async function AdminRoutesView() {
     },
     {
       label: "Rest of week",
-      minutes: plannedMinutesByBucket.later,
-      routeCount: plannedRouteCountsByBucket.later,
+      minutes: restOfWeekMinutes,
+      routeCount: restOfWeekRouteCount,
     },
   ];
 
@@ -659,15 +664,15 @@ export async function AdminRoutesView() {
     <div className="space-y-6">
       <PageHeader title="Routes" />
 
-      <div className="grid gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
+      <div className="grid gap-4 xl:grid-cols-[270px_minmax(0,1fr)]">
         <section className="space-y-3">
-          <DashboardSectionHeader title="Estimated route hours" />
+          <DashboardSectionHeader title="Route hours" />
           <Card className="overflow-hidden p-0">
             <div className="divide-line/70 divide-y">
               {timeNeededRows.map((row) => (
                 <div
                   key={row.label}
-                  className="grid gap-2 px-3 py-3 sm:grid-cols-[1fr_auto] sm:items-center xl:grid-cols-1 xl:items-start"
+                  className="grid gap-1 px-2.5 py-2.5 sm:grid-cols-[1fr_auto] sm:items-center xl:grid-cols-1 xl:items-start"
                 >
                   <p className="font-display text-ink text-[22px] leading-none font-semibold tracking-[-0.01em]">
                     {row.label}
@@ -698,23 +703,15 @@ export async function AdminRoutesView() {
       </div>
 
       <section className="space-y-3">
-        <DashboardSectionHeader
-          actionPlacement="inline"
-          title="Today's deliveries"
-          action={
-            <Badge tone="warning">{data.requestBuckets.today.length}</Badge>
+        <DashboardSectionHeader title="Deliveries" />
+        <AdminDeliveriesToggle
+          laterCount={laterRequests.length}
+          laterTable={<RoutedPeopleTable requests={laterRequests} />}
+          todayCount={data.requestBuckets.today.length}
+          todayTable={
+            <RoutedPeopleTable requests={data.requestBuckets.today} />
           }
         />
-        <RoutedPeopleTable requests={data.requestBuckets.today} />
-      </section>
-
-      <section className="space-y-3">
-        <DashboardSectionHeader
-          actionPlacement="inline"
-          title="Later deliveries"
-          action={<Badge tone="info">{laterRequests.length}</Badge>}
-        />
-        <RoutedPeopleTable requests={laterRequests} />
       </section>
     </div>
   );

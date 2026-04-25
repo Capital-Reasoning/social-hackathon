@@ -9,11 +9,12 @@ import { MealfloIcon } from "@/components/mealflo/icon";
 import { publicEnv } from "@/lib/config/public-env";
 import { cn } from "@/lib/utils";
 import deliveryVan from "../../../design/assets/icons/delivery-van.png";
+import groceryBag from "../../../design/assets/icons/grocery-bag.png";
 import locationPin from "../../../design/assets/icons/location-pin.png";
 import mealContainer from "../../../design/assets/icons/meal-container.png";
 
 type MarkerPoint = {
-  icon?: "delivery-van" | "location-pin" | "meal-container";
+  icon?: "delivery-van" | "grocery-bag" | "location-pin" | "meal-container";
   id: string;
   label: string;
   latitude: number;
@@ -92,6 +93,7 @@ const toneBorders: Record<MarkerPoint["tone"], string> = {
 
 const markerIcons = {
   "delivery-van": deliveryVan,
+  "grocery-bag": groceryBag,
   "location-pin": locationPin,
   "meal-container": mealContainer,
 } satisfies Record<NonNullable<MarkerPoint["icon"]>, StaticImageData>;

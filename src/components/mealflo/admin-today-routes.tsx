@@ -105,7 +105,7 @@ function MiniRouteMap({
 
   return (
     <MapCanvas
-      className="h-[132px] min-h-[132px] w-full min-w-[220px] rounded-[12px] sm:w-[280px] xl:w-[300px]"
+      className="h-[184px] min-h-[184px] w-full min-w-[240px] rounded-[12px] sm:w-[360px] xl:w-[380px]"
       camera={{ mode: "fit" }}
       interactionLocked
       markerStyle="dot"
@@ -190,52 +190,50 @@ export function TodayRouteList({
             key={route.id}
             className="group/route border-line/70 border-b last:border-b-0"
           >
-            <div className="grid gap-4 px-4 py-3 transition-[background-color] duration-[var(--mf-duration-micro)] ease-out group-hover/route:bg-[rgba(253,248,228,0.35)] sm:grid-cols-[300px_minmax(0,1fr)_auto] sm:items-center">
+            <button
+              type="button"
+              aria-controls={detailsId}
+              aria-expanded={isOpen}
+              className="grid w-full cursor-pointer gap-4 px-4 py-3 text-left transition-[background-color] duration-[var(--mf-duration-micro)] ease-out outline-none group-hover/route:bg-[rgba(253,248,228,0.35)] hover:bg-[rgba(253,248,228,0.55)] focus-visible:bg-[rgba(240,243,255,0.7)] focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-[rgba(120,144,250,0.5)] sm:grid-cols-[380px_minmax(0,1fr)_auto] sm:items-center"
+              onClick={toggleRoute}
+            >
               <MiniRouteMap
                 activeStopIds={routeState.activeStopIds}
                 route={route}
               />
-              <button
-                type="button"
-                aria-controls={detailsId}
-                aria-expanded={isOpen}
-                className="grid cursor-pointer gap-4 rounded-[12px] text-left transition-[background-color] duration-[var(--mf-duration-micro)] ease-out outline-none hover:bg-[rgba(253,248,228,0.55)] focus-visible:bg-[rgba(240,243,255,0.7)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[rgba(120,144,250,0.5)] sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                onClick={toggleRoute}
-              >
-                <div className="min-w-0 space-y-2">
-                  <h3 className="font-display text-ink text-[23px] leading-tight font-semibold">
-                    {route.name}
-                  </h3>
-                  <div className="text-muted flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-5">
-                    {metaItems.map((item, itemIndex) => (
-                      <span
-                        key={`${route.id}-${item}`}
-                        className="inline-flex items-center gap-2"
-                      >
-                        {itemIndex > 0 ? (
-                          <span
-                            aria-hidden="true"
-                            className="bg-line-strong h-1.5 w-1.5 rounded-full"
-                          />
-                        ) : null}
-                        <span>{item}</span>
-                      </span>
-                    ))}
-                  </div>
+              <div className="min-w-0 space-y-2">
+                <h3 className="font-display text-ink text-[23px] leading-tight font-semibold">
+                  {route.name}
+                </h3>
+                <div className="text-muted flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-5">
+                  {metaItems.map((item, itemIndex) => (
+                    <span
+                      key={`${route.id}-${item}`}
+                      className="inline-flex items-center gap-2"
+                    >
+                      {itemIndex > 0 ? (
+                        <span
+                          aria-hidden="true"
+                          className="bg-line-strong h-1.5 w-1.5 rounded-full"
+                        />
+                      ) : null}
+                      <span>{item}</span>
+                    </span>
+                  ))}
                 </div>
-                <div className="grid gap-1 text-left sm:min-w-[150px] sm:text-right">
-                  <p className="font-display text-ink text-[28px] leading-none font-bold">
-                    {formatAdminMinutes(totalMinutes)}
-                  </p>
-                  <p className="text-muted text-sm leading-5">
-                    {route.driveTime} drive + {stopMinutes} min stops
-                  </p>
-                  <span className="text-info-text text-sm font-semibold">
-                    View details
-                  </span>
-                </div>
-              </button>
-            </div>
+              </div>
+              <div className="grid gap-1 text-left sm:min-w-[150px] sm:text-right">
+                <p className="font-display text-ink text-[28px] leading-none font-bold">
+                  {formatAdminMinutes(totalMinutes)}
+                </p>
+                <p className="text-muted text-sm leading-5">
+                  {route.driveTime} drive + {stopMinutes} min stops
+                </p>
+                <span className="text-info-text text-sm font-semibold">
+                  View details
+                </span>
+              </div>
+            </button>
             <div
               id={detailsId}
               aria-hidden={!isOpen}
@@ -248,9 +246,9 @@ export function TodayRouteList({
               <div className="min-h-0 overflow-hidden">
                 <div className="border-line/70 grid gap-5 border-t bg-[rgba(253,248,228,0.42)] px-4 py-5 sm:grid-cols-[minmax(0,1fr)_260px] sm:px-5">
                   <div className="space-y-3">
-                    <p className="text-muted text-xs font-semibold tracking-[0.08em] uppercase">
+                    <h4 className="font-display text-ink pb-1 text-[24px] leading-tight font-semibold tracking-[-0.01em]">
                       Food to load
-                    </p>
+                    </h4>
                     <div className="border-line/70 overflow-hidden rounded-[12px] border-[1.5px] bg-white">
                       {activeStops.map((stop) => (
                         <div

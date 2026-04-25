@@ -17,6 +17,7 @@ import {
   markDraftOther,
   heartbeatDriverSession,
   parseInventoryDocument,
+  parsePublicIntakeDraft,
   recordManualInventoryEntry,
   resetDemoData,
   resetRouteSession,
@@ -64,9 +65,27 @@ describe.sequential("backend foundations", () => {
       .where(eq(intakeDrafts.id, created.draftId));
 
     expect(intake.subject).toContain("Daria Cole");
+    expect(intake.status).toBe("pending_review");
     expect(draft.draftType).toBe("request");
     expect(draft.status).toBe("pending");
     expect(draft.confidenceScore).toBeGreaterThanOrEqual(80);
+
+    const inboxBeforeParse = await getAdminInboxData(created.draftId);
+    expect(
+      inboxBeforeParse.inboxItems.find((item) => item.id === created.draftId)
+        ?.isParsing
+    ).toBe(true);
+
+    await parsePublicIntakeDraft(created.draftId);
+
+    const [parsedIntake] = await db
+      .select()
+      .from(intakeMessages)
+      .where(eq(intakeMessages.id, created.intakeId));
+    const inboxAfterParse = await getAdminInboxData(created.draftId);
+
+    expect(parsedIntake.status).toBe("draft_ready");
+    expect(inboxAfterParse.selectedItem.isParsing).toBe(false);
   });
 
   it("ingests only Mealflo Gmail alias messages into pending drafts", async () => {

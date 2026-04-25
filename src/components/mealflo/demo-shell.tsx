@@ -17,9 +17,12 @@ import { Field, Input, Select, Textarea } from "@/components/mealflo/field";
 import { MealfloIcon, type IconName } from "@/components/mealflo/icon";
 import {
   demoDriverControlEvent,
+  demoDriverStatusEvent,
+  demoDriverStatusRequestEvent,
   demoInboundPayloads,
   roleDefinitions,
   type DemoDriverControlAction,
+  type DemoDriverStatus,
   type DemoRole,
 } from "@/lib/demo";
 import { cn } from "@/lib/utils";
@@ -48,35 +51,19 @@ const controlButtons = [
     roles: ["admin"] as DemoRole[],
   },
   {
-    id: "stop",
-    action: "advance-stop",
+    id: "jump-next-stop",
+    action: "jump-to-next-stop",
     icon: "route-stops",
-    label: "Simulate next stop",
-    message: "The phone advanced to the next stop.",
+    label: "Jump to next stop",
+    message: "Driver jumped to the next stop.",
     roles: ["driver"] as DemoRole[],
   },
   {
-    id: "driver",
-    action: "switch-driver",
-    icon: "delivery-van",
-    label: "Switch route",
-    message: "Route view changed.",
-    roles: ["driver"] as DemoRole[],
-  },
-  {
-    id: "gps",
-    action: "toggle-location",
-    icon: "location-pin",
-    label: "Toggle GPS",
-    message: "Location mode changed.",
-    roles: ["driver"] as DemoRole[],
-  },
-  {
-    id: "route-reset",
-    action: "reset-route",
+    id: "driver-reset",
+    action: "reload-driver-view",
     icon: "repeat-arrows",
-    label: "Reset route",
-    message: "The active route is reset for another pass.",
+    label: "Reset",
+    message: "Driver view reloaded.",
     roles: ["driver"] as DemoRole[],
   },
   {
@@ -85,7 +72,7 @@ const controlButtons = [
     icon: "settings-gear",
     label: "Reset demo",
     message: "Seed data restored.",
-    roles: ["admin", "public", "driver"] as DemoRole[],
+    roles: ["admin", "public"] as DemoRole[],
   },
 ] as const;
 
@@ -119,21 +106,24 @@ const defaultRequestForm: RequestFormState = {
 };
 
 const driverControlHints: Record<string, string> = {
-  driver: "Show another route",
-  "demo-reset": "Restore seed data across the app",
-  gps: "Switch between phone GPS and fake movement",
-  "route-reset": "Clear this route for another run",
-  stop: "Mark the current stop handled",
+  "driver-reset": "Reload the driver interface",
+  "jump-next-stop": "Skip the active drive",
+};
+
+const disabledDriverControlHints: Record<string, string> = {
+  "jump-next-stop": "Available while driving",
 };
 
 function DriverControlPanel({
   confirmedControlId,
   controls,
+  disabledControlIds,
   pendingControlId,
   onControl,
 }: {
   confirmedControlId: string | null;
   controls: readonly DemoControl[];
+  disabledControlIds?: ReadonlySet<string>;
   pendingControlId: string | null;
   onControl: (control: DemoControl) => void;
 }) {
@@ -153,21 +143,27 @@ function DriverControlPanel({
       {controls.map((control) => {
         const pending = pendingControlId === control.id;
         const confirmed = confirmedControlId === control.id;
+        const controlDisabled = Boolean(disabledControlIds?.has(control.id));
+        const disabled = pending || controlDisabled;
         const hint = pending
           ? "Working"
           : confirmed
             ? control.message
-            : driverControlHints[control.id];
+            : controlDisabled
+              ? disabledDriverControlHints[control.id]
+              : driverControlHints[control.id];
 
         return (
           <button
             key={control.id}
             type="button"
-            disabled={pending}
+            disabled={disabled}
             className={cn(
               "grid min-h-[76px] grid-cols-[54px_1fr_28px] items-center gap-4 rounded-[10px] border border-white/14 bg-white/10 px-4 py-3 text-left shadow-[0_14px_28px_rgba(0,0,0,0.18)] transition-[transform,background-color,border-color,opacity] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 hover:border-white/24 hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60",
               confirmed && "border-[#88d5bd]/40 bg-[#88d5bd]/12",
-              pending && "cursor-wait opacity-70"
+              pending && "cursor-wait opacity-70",
+              controlDisabled &&
+                "cursor-not-allowed opacity-50 hover:translate-y-0 hover:border-white/14 hover:bg-white/10"
             )}
             onClick={() => onControl(control)}
           >
@@ -248,6 +244,7 @@ export function DemoShell({
   const [confirmedControlId, setConfirmedControlId] = useState<string | null>(
     null
   );
+  const [driverCanJumpToNextStop, setDriverCanJumpToNextStop] = useState(false);
   const [pendingControlId, setPendingControlId] = useState<string | null>(null);
   const [requestForm, setRequestForm] =
     useState<RequestFormState>(defaultRequestForm);
@@ -264,6 +261,24 @@ export function DemoShell({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (activeRole !== "driver") {
+      return;
+    }
+
+    const handleDriverStatus = (event: Event) => {
+      const detail = (event as CustomEvent<DemoDriverStatus>).detail;
+      setDriverCanJumpToNextStop(Boolean(detail?.canJumpToNextStop));
+    };
+
+    window.addEventListener(demoDriverStatusEvent, handleDriverStatus);
+    window.dispatchEvent(new Event(demoDriverStatusRequestEvent));
+
+    return () => {
+      window.removeEventListener(demoDriverStatusEvent, handleDriverStatus);
+    };
+  }, [activeRole]);
 
   const brieflyConfirmControl = (controlId: string) => {
     if (confirmedTimeoutRef.current) {
@@ -324,6 +339,17 @@ export function DemoShell({
         clearDriverProgress();
         setMessage(control.message);
         router.refresh();
+        return;
+      }
+
+      if (control.action === "reload-driver-view") {
+        setMessage(control.message);
+        window.location.reload();
+        return;
+      }
+
+      if (control.action === "jump-to-next-stop" && !driverCanJumpToNextStop) {
+        setMessage("Jump is available while driving.");
         return;
       }
 
@@ -405,6 +431,11 @@ export function DemoShell({
     <DriverControlPanel
       confirmedControlId={confirmedControlId}
       controls={visibleControls}
+      disabledControlIds={
+        activeRole === "driver" && !driverCanJumpToNextStop
+          ? new Set(["jump-next-stop"])
+          : undefined
+      }
       pendingControlId={pendingControlId}
       onControl={(control) => {
         void runControl(control);

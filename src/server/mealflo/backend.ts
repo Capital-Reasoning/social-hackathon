@@ -51,6 +51,7 @@ import {
 
 const VANCOUVER_TZ = "America/Vancouver";
 const ANCHOR_STALE_AFTER_MS = 90_000;
+const PUBLIC_FORM_PARSING_VERSION = "public-form-parsing-v1";
 
 type Tone = "primary" | "success" | "warning" | "info";
 
@@ -226,6 +227,7 @@ export type InboxQueueItem = {
   channel: "form" | "gmail";
   draftType: "other" | "request" | "volunteer";
   id: string;
+  isParsing: boolean;
   sender: string;
   snippet: string;
   subject: string;
@@ -277,6 +279,7 @@ export type AdminInboxData = {
     summary: string;
     volunteerAvailability: string;
     volunteerStartArea: string;
+    isParsing: boolean;
   };
 };
 
@@ -1552,7 +1555,7 @@ export async function createRequestIntake(
         form: "public-request",
         submittedFields: input,
       },
-      status: "draft_ready",
+      status: "pending_review",
       receivedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -1569,7 +1572,7 @@ export async function createRequestIntake(
       confidenceScore: confidenceFromFields(92, lowConfidenceFields),
       lowConfidenceFields,
       summary: summarizeRequestPayload(input),
-      parserVersion: "public-form-v1",
+      parserVersion: PUBLIC_FORM_PARSING_VERSION,
       status: "pending",
       createdAt: now,
       updatedAt: now,
@@ -1611,7 +1614,7 @@ export async function createVolunteerIntake(
         form: "public-volunteer",
         submittedFields: input,
       },
-      status: "draft_ready",
+      status: "pending_review",
       receivedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -1628,7 +1631,7 @@ export async function createVolunteerIntake(
       confidenceScore: confidenceFromFields(94, lowConfidenceFields),
       lowConfidenceFields,
       summary: summarizeVolunteerPayload(input),
-      parserVersion: "public-form-v1",
+      parserVersion: PUBLIC_FORM_PARSING_VERSION,
       status: "pending",
       createdAt: now,
       updatedAt: now,
@@ -1640,6 +1643,80 @@ export async function createVolunteerIntake(
     draftId: draftRecord.id,
     intakeId: intakeRecord.id,
   };
+}
+
+function rawAddressFromParsedDraft(draft: ParsedIntakeDraft) {
+  if (draft.draftType === "request") {
+    return `${draft.structuredPayload.addressLine1}, ${draft.structuredPayload.municipality}`;
+  }
+
+  if (draft.draftType === "volunteer") {
+    return `${draft.structuredPayload.homeArea}, ${draft.structuredPayload.homeMunicipality}`;
+  }
+
+  return undefined;
+}
+
+export async function parsePublicIntakeDraft(draftId: string) {
+  const database = getDb();
+  const [draft] = await database
+    .select()
+    .from(intakeDrafts)
+    .where(eq(intakeDrafts.id, draftId))
+    .limit(1);
+
+  if (!draft || draft.status !== "pending") {
+    return null;
+  }
+
+  const [intake] = await database
+    .select()
+    .from(intakeMessages)
+    .where(eq(intakeMessages.id, draft.intakeMessageId))
+    .limit(1);
+
+  if (!intake || intake.channel !== "public_form") {
+    return null;
+  }
+
+  const parsed = await parseIncomingIntake({
+    channel: "public_form",
+    rawAddress: intake.rawAddress,
+    rawBody: intake.rawBody,
+    senderEmail: intake.senderEmail,
+    senderName: intake.senderName,
+    senderPhone: intake.senderPhone,
+    subject: intake.subject,
+  });
+  const now = new Date();
+  const [updatedDraft] = await database
+    .update(intakeDrafts)
+    .set({
+      confidenceScore: parsed.confidenceScore,
+      draftType: parsed.draftType,
+      lowConfidenceFields: parsed.lowConfidenceFields,
+      parserVersion: parsed.parserVersion,
+      structuredPayload: parsed.structuredPayload,
+      summary: parsed.summary,
+      updatedAt: now,
+    })
+    .where(eq(intakeDrafts.id, draftId))
+    .returning();
+
+  await database
+    .update(intakeMessages)
+    .set({
+      intakeKind:
+        parsed.draftType === "request" || parsed.draftType === "volunteer"
+          ? parsed.draftType
+          : "other",
+      rawAddress: rawAddressFromParsedDraft(parsed) ?? intake.rawAddress,
+      status: "draft_ready",
+      updatedAt: now,
+    })
+    .where(eq(intakeMessages.id, intake.id));
+
+  return updatedDraft ?? null;
 }
 
 function isTargetMealfloRecipient(
@@ -3147,6 +3224,9 @@ export async function getAdminInboxData(
                 .filter(Boolean)
                 .join(" ")
             : (intake?.senderName ?? "Unknown sender");
+      const isParsing =
+        draft.parserVersion === PUBLIC_FORM_PARSING_VERSION ||
+        intake?.status === "pending_review";
 
       return {
         id: draft.id,
@@ -3158,6 +3238,7 @@ export async function getAdminInboxData(
         subject: intake?.subject ?? draft.summary,
         sender: displayName || intake?.senderName || "Unknown sender",
         address,
+        isParsing,
         snippet: intake?.rawBody.slice(0, 90) ?? "",
       } satisfies InboxQueueItem;
     }),
@@ -3212,6 +3293,9 @@ export async function getAdminInboxData(
       structuredPayload: selectedDraft?.structuredPayload ?? {},
       subject: selectedIntake?.subject ?? selectedDraft?.summary ?? "No intake",
       summary: selectedDraft?.summary ?? "No pending draft is waiting.",
+      isParsing:
+        selectedDraft?.parserVersion === PUBLIC_FORM_PARSING_VERSION ||
+        selectedIntake?.status === "pending_review",
       volunteerAvailability: parsedVolunteer
         ? `${parsedVolunteer.minutesAvailable} minutes, ${parsedVolunteer.windowStart}-${parsedVolunteer.windowEnd}`
         : "",

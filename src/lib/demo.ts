@@ -2,9 +2,14 @@ export type DemoRole = "admin" | "public" | "driver";
 
 export type DemoDriverControlAction =
   | "advance-stop"
+  | "jump-to-next-stop"
   | "reset-route"
   | "switch-driver"
   | "toggle-location";
+
+export type DemoDriverStatus = {
+  canJumpToNextStop: boolean;
+};
 
 export type DemoPersona = {
   id: string;
@@ -14,6 +19,9 @@ export type DemoPersona = {
 };
 
 export const demoDriverControlEvent = "mealflo-demo-driver-control";
+export const demoDriverStatusEvent = "mealflo-demo-driver-status";
+export const demoDriverStatusRequestEvent =
+  "mealflo-demo-driver-status-request";
 
 export const roleDefinitions: Record<
   DemoRole,

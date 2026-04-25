@@ -28,6 +28,7 @@ describe("env parsing", () => {
       hasDatabase: false,
       hasOpenAi: false,
       hasRouting: false,
+      openAiIntakeModel: "gpt-5.4-mini",
     });
   });
 });

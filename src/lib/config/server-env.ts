@@ -33,7 +33,7 @@ export function parseServerEnv(raw: Record<string, string | undefined>) {
   const openAiIntakeModel =
     parsed.OPENAI_INTAKE_MODEL && parsed.OPENAI_INTAKE_MODEL.length > 0
       ? parsed.OPENAI_INTAKE_MODEL
-      : "gpt-4o-mini";
+      : "gpt-5.4-mini";
   const openRouteServiceApiKey =
     parsed.OPENROUTESERVICE_API_KEY &&
     parsed.OPENROUTESERVICE_API_KEY.length > 0

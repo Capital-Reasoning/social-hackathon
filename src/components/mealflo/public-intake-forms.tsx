@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
-import { Button, ButtonLink } from "@/components/mealflo/button";
+import { Button } from "@/components/mealflo/button";
 import { Field, Input, Select, Textarea } from "@/components/mealflo/field";
-import { IconSwatch } from "@/components/mealflo/icon";
+import { IconSwatch, MealfloIcon } from "@/components/mealflo/icon";
+import {
+  randomRequestDemoFill,
+  randomVolunteerDemoFill,
+} from "@/lib/mealflo-demo-intake";
 
 type SubmitState =
   | {
@@ -48,6 +52,29 @@ function numberField(value: FormDataEntryValue | null, fallback: number) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
 
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function fillFormFields(
+  form: HTMLFormElement | null,
+  values: Record<string, string>
+) {
+  if (!form) {
+    return;
+  }
+
+  for (const [name, value] of Object.entries(values)) {
+    const field = form.elements.namedItem(name);
+
+    if (
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLSelectElement ||
+      field instanceof HTMLTextAreaElement
+    ) {
+      field.value = value;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
 }
 
 function tagsFromText(value: FormDataEntryValue | null) {
@@ -139,6 +166,27 @@ function SubmitStatus({ state }: { state: SubmitState }) {
     return null;
   }
 
+  if (state.status === "success") {
+    return (
+      <div
+        aria-live="polite"
+        className="animate-[mfSuccessPop_420ms_var(--mf-ease-spring)] rounded-[20px] border-[2px] border-[rgba(78,173,111,0.38)] bg-[var(--mf-color-green-50)] p-5"
+      >
+        <div className="flex items-center gap-4">
+          <span className="inline-flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-[rgba(78,173,111,0.34)] bg-white">
+            <MealfloIcon name="checkmark-circle" size={54} />
+          </span>
+          <div className="space-y-1">
+            <p className="font-display text-success-text text-[clamp(2rem,3vw,2.65rem)] leading-none font-bold tracking-[-0.02em]">
+              Thank you
+            </p>
+            <p className="text-ink text-base leading-6">{state.message}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       aria-live="polite"
@@ -147,32 +195,76 @@ function SubmitStatus({ state }: { state: SubmitState }) {
       <div className="flex items-start gap-3">
         <IconSwatch
           framed
-          name={
-            state.status === "success" ? "checkmark-circle" : "warning-alert"
-          }
+          name="warning-alert"
           size={28}
           swatchSize={48}
-          tone={state.status === "success" ? "action" : "warm"}
+          tone="warm"
         />
         <div className="space-y-1">
           <p className="font-display text-ink text-[22px] font-semibold tracking-[-0.02em]">
-            {state.status === "success" ? "Draft ready" : "Check the form"}
+            Check the form
           </p>
           <p className="text-muted text-sm leading-6">{state.message}</p>
         </div>
       </div>
-      {state.status === "success" ? (
-        <ButtonLink href="/demo/admin?view=inbox" size="sm" variant="secondary">
-          Review inbox
-        </ButtonLink>
-      ) : null}
+    </div>
+  );
+}
+
+function DemoGeneratePrompt({ onGenerate }: { onGenerate: () => void }) {
+  return (
+    <div className="border-action flex flex-col gap-5 rounded-[18px] border-2 bg-[var(--mf-color-blue-50)] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5 md:col-span-2">
+      <div className="flex min-w-0 items-center gap-4">
+        <IconSwatch
+          framed
+          name="star"
+          size={36}
+          swatchSize={64}
+          tone="action"
+        />
+        <div className="min-w-0">
+          <p className="font-display text-ink text-[clamp(1.45rem,2.4vw,1.9rem)] leading-tight font-bold tracking-[-0.02em]">
+            Sample details
+          </p>
+          <p className="text-muted mt-1 text-base leading-6">
+            Use realistic Victoria details for a quick entry.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="border-action bg-action hover:border-action-strong hover:bg-action-strong inline-flex h-[76px] min-w-[300px] shrink-0 items-center justify-center gap-3 rounded-[16px] border-[1.5px] px-9 leading-none text-[var(--mf-color-on-action)] shadow-[0_10px_24px_rgba(61,92,245,0.2)] transition-[transform,background-color,border-color,opacity] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)] active:scale-[0.97]"
+        style={{
+          fontSize: "clamp(1.7rem, 2.5vw, 2.1rem)",
+          fontWeight: 800,
+        }}
+        onClick={onGenerate}
+      >
+        <MealfloIcon name="pencil-edit" size={36} />
+        <span>Generate</span>
+      </button>
     </div>
   );
 }
 
 export function PublicRequestForm() {
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, setState] = useState<SubmitState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function handleGenerate() {
+    const sample = randomRequestDemoFill();
+
+    fillFormFields(formRef.current, {
+      address: sample.address,
+      contactMethod: sample.contactMethod,
+      message: sample.message,
+      name: sample.name,
+      requestedMealCount: sample.requestedMealCount,
+      urgency: sample.urgency,
+    });
+    setState(null);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -202,7 +294,8 @@ export function PublicRequestForm() {
       form.reset();
       setState({
         draftId,
-        message: "The request is ready for coordinator review.",
+        message:
+          "Your request has been received. The Mealflo team will follow up if anything is unclear.",
         status: "success",
       });
     } catch (error) {
@@ -218,8 +311,17 @@ export function PublicRequestForm() {
     }
   }
 
+  if (state?.status === "success") {
+    return <SubmitStatus state={state} />;
+  }
+
   return (
-    <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
+    <form
+      ref={formRef}
+      className="grid gap-4 md:grid-cols-2"
+      onSubmit={handleSubmit}
+    >
+      <DemoGeneratePrompt onGenerate={handleGenerate} />
       <Field label="Who should we contact?" htmlFor="request-name" required>
         <Input
           required
@@ -285,7 +387,11 @@ export function PublicRequestForm() {
           size="lg"
           type="submit"
           variant="primary"
-          className="font-bold"
+          className="h-[60px] font-black"
+          style={{
+            fontSize: "1.35rem",
+            fontWeight: 850,
+          }}
         >
           {isSubmitting ? "Sending request" : "Submit request"}
         </Button>
@@ -296,8 +402,24 @@ export function PublicRequestForm() {
 }
 
 export function PublicVolunteerForm() {
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, setState] = useState<SubmitState>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function handleGenerate() {
+    const sample = randomVolunteerDemoFill();
+
+    fillFormFields(formRef.current, {
+      availabilityDetails: sample.availabilityDetails,
+      canBringCooler: sample.canBringCooler,
+      canClimbStairs: sample.canClimbStairs,
+      contact: sample.contact,
+      details: sample.details,
+      name: sample.name,
+      vehicleAccess: sample.vehicleAccess,
+    });
+    setState(null);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -336,7 +458,8 @@ export function PublicVolunteerForm() {
       form.reset();
       setState({
         draftId,
-        message: "The offer is ready for coordinator review.",
+        message:
+          "Your availability has been received. The Mealflo team will reach out when there is a route that fits.",
         status: "success",
       });
     } catch (error) {
@@ -352,8 +475,17 @@ export function PublicVolunteerForm() {
     }
   }
 
+  if (state?.status === "success") {
+    return <SubmitStatus state={state} />;
+  }
+
   return (
-    <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
+    <form
+      ref={formRef}
+      className="grid gap-4 md:grid-cols-2"
+      onSubmit={handleSubmit}
+    >
+      <DemoGeneratePrompt onGenerate={handleGenerate} />
       <Field label="Name" htmlFor="volunteer-name" required>
         <Input
           required
@@ -429,15 +561,17 @@ export function PublicVolunteerForm() {
       <div className="grid gap-4 md:col-span-2">
         <Button
           fullWidth
-          className="font-bold"
+          className="h-[60px] font-black"
           disabled={isSubmitting}
           size="lg"
           type="submit"
           variant="primary"
+          style={{
+            fontSize: "1.35rem",
+            fontWeight: 850,
+          }}
         >
-          {isSubmitting
-            ? "Sending availability"
-            : "Submit availability"}
+          {isSubmitting ? "Sending availability" : "Submit availability"}
         </Button>
         <SubmitStatus state={state} />
       </div>

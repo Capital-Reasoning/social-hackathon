@@ -7,6 +7,8 @@ import { Card } from "@/components/mealflo/card";
 import { IconSwatch, MealfloIcon } from "@/components/mealflo/icon";
 import {
   demoDriverControlEvent,
+  demoDriverStatusEvent,
+  demoDriverStatusRequestEvent,
   type DemoDriverControlAction,
 } from "@/lib/demo";
 import { MapCanvas } from "@/components/mealflo/map-canvas";
@@ -63,9 +65,6 @@ const driveAnimationTuning = {
   minDurationMs: 10_000,
   targetSpeedKmh: 100,
 };
-const phoneScrollScreenClass =
-  "mf-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1 pb-2";
-
 function formatAvailabilityLabel(minutes: number) {
   if (minutes === 60) {
     return "1hr";
@@ -702,6 +701,34 @@ function MetricStrip({
   );
 }
 
+function CompletionTimeMetrics({ route }: { route: DriverRouteOption }) {
+  const items = [
+    {
+      label: "Drive",
+      value: route.driveTime,
+    },
+    {
+      label: "Total",
+      value: route.totalPlannedTime,
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      {items.map((item) => (
+        <div key={item.label} className="border-line border-t-[1.5px] pt-3">
+          <p className="font-display text-ink text-[29px] leading-[0.95] font-semibold tracking-[-0.03em]">
+            {item.value}
+          </p>
+          <p className="text-muted mt-1 text-[13px] font-medium">
+            {item.label}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CallButton({
   className,
   phone,
@@ -765,7 +792,7 @@ function DirectionGlyph({
         className="border-line flex shrink-0 items-center justify-center rounded-[14px] border-[1.5px] bg-[rgba(250,226,120,0.24)]"
         style={{ height: size, width: size }}
       >
-        <MealfloIcon name="meal-container" size={26} />
+        <MealfloIcon name="grocery-bag" size={26} />
       </span>
     );
   }
@@ -926,7 +953,7 @@ function RouteMap({
     return [
       {
         id: `${route.id}-depot`,
-        icon: "meal-container" as const,
+        icon: "grocery-bag" as const,
         label: "Depot",
         latitude: start.currentLat,
         longitude: start.currentLng,
@@ -1107,6 +1134,7 @@ function DriverMobileFlowReady({
   const sessionIdRef = useRef<string | null>(null);
   const closedSessionIdsRef = useRef<Set<string>>(new Set());
   const liveSessionMountedRef = useRef(false);
+  const jumpDriveAnimationRef = useRef(false);
 
   const deliveredCount = countDelivered(completedStops);
   const progressedCount = Object.keys(completedStops).length;
@@ -1121,6 +1149,7 @@ function DriverMobileFlowReady({
   const routeComplete = currentStopIndex >= selectedRoute.stops.length;
   const currentStopPhone = currentStop?.phone ?? selectedRoute.volunteer.phone;
   const isRouteMotion = routeDrivePhase === "to_stop";
+  const canJumpToNextStop = screen === "active" && isRouteMotion;
   const navigationStopIndex = routeComplete
     ? undefined
     : isRouteMotion
@@ -1213,6 +1242,35 @@ function DriverMobileFlowReady({
     selectedRoute,
     sessionId,
   ]);
+
+  useEffect(() => {
+    const dispatchDriverStatus = () => {
+      window.dispatchEvent(
+        new CustomEvent(demoDriverStatusEvent, {
+          detail: {
+            canJumpToNextStop,
+          },
+        })
+      );
+    };
+
+    dispatchDriverStatus();
+    window.addEventListener(demoDriverStatusRequestEvent, dispatchDriverStatus);
+
+    return () => {
+      window.removeEventListener(
+        demoDriverStatusRequestEvent,
+        dispatchDriverStatus
+      );
+      window.dispatchEvent(
+        new CustomEvent(demoDriverStatusEvent, {
+          detail: {
+            canJumpToNextStop: false,
+          },
+        })
+      );
+    };
+  }, [canJumpToNextStop]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -1519,7 +1577,15 @@ function DriverMobileFlowReady({
         const tick = (timestamp: number) => {
           const deltaMs = Math.max(timestamp - previousTimestamp, 16);
           previousTimestamp = timestamp;
-          const progress = Math.min((timestamp - startedAt) / duration, 1);
+          const jumpToEnd = jumpDriveAnimationRef.current;
+          const progress = jumpToEnd
+            ? 1
+            : Math.min((timestamp - startedAt) / duration, 1);
+
+          if (jumpToEnd) {
+            jumpDriveAnimationRef.current = false;
+          }
+
           const { bearing, coordinate, distanceAlongLine } =
             getLinePointWithBearing(line, progress);
           const targetBearing = getCameraBearingTarget({
@@ -1861,6 +1927,16 @@ function DriverMobileFlowReady({
         event as CustomEvent<{ action?: DemoDriverControlAction }>
       ).detail?.action;
 
+      if (action === "jump-to-next-stop") {
+        if (routeDrivePhase === "to_stop") {
+          jumpDriveAnimationRef.current = true;
+          setStatusText("Jumping to the next stop.");
+        } else {
+          setStatusText("Jump is available while driving.");
+        }
+        return;
+      }
+
       if (action === "advance-stop") {
         void completeStop("delivered");
         return;
@@ -2009,31 +2085,33 @@ function DriverMobileFlowReady({
 
   if (routeComplete) {
     return (
-      <section className={phoneScrollScreenClass}>
-        <Card className="space-y-5 bg-[linear-gradient(180deg,rgba(237,250,243,0.9)_0%,rgba(255,255,255,1)_72%)]">
-          <IconSwatch
-            framed
-            name="checkmark-circle"
-            size={44}
-            swatchSize={70}
-            tone="surface"
-          />
-          <div className="space-y-3">
-            <h1 className="font-display text-ink text-[44px] leading-[0.98] font-bold tracking-[-0.04em]">
+      <section className="mf-enter flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+        <div className="shrink-0 space-y-4 px-1 pt-1">
+          <div className="flex items-center gap-4">
+            <IconSwatch
+              framed
+              name="checkmark-circle"
+              size={38}
+              swatchSize={58}
+              tone="surface"
+            />
+            <h1 className="font-display text-ink text-[42px] leading-[0.98] font-bold tracking-[-0.04em]">
               Thank you!
             </h1>
           </div>
-          <MetricStrip remainingCount={0} route={selectedRoute} />
-        </Card>
+          <CompletionTimeMetrics route={selectedRoute} />
+        </div>
 
-        <RouteMap
-          className="h-[280px]"
-          currentPosition={currentPosition}
-          currentStop={null}
-          route={selectedRoute}
-        />
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          <RouteMap
+            className="h-full min-h-0"
+            currentPosition={currentPosition}
+            currentStop={null}
+            route={selectedRoute}
+          />
+        </div>
 
-        <div className="mt-auto grid gap-3">
+        <div className="grid shrink-0 gap-3 pb-5">
           <Button
             fullWidth
             onClick={resetLocalProgress}
@@ -2200,7 +2278,7 @@ function DriverMobileFlowReady({
               <Button
                 className="h-[56px] min-h-[56px] text-base"
                 fullWidth
-                leading={<MealfloIcon name="meal-container" size={30} />}
+                leading={<MealfloIcon name="grocery-bag" size={30} />}
                 onClick={() => void collectFood()}
                 size="lg"
                 variant="primary"

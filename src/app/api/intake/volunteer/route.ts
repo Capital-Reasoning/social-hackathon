@@ -1,15 +1,23 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { routeErrorResponse } from "@/app/api/_lib/responses";
-import { createVolunteerIntake } from "@/server/mealflo/backend";
+import {
+  createVolunteerIntake,
+  parsePublicIntakeDraft,
+} from "@/server/mealflo/backend";
 
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    const data = await createVolunteerIntake(payload);
+
+    after(() => {
+      void parsePublicIntakeDraft(data.draftId).catch(() => undefined);
+    });
 
     return NextResponse.json({
       ok: true,
-      data: await createVolunteerIntake(payload),
+      data,
     });
   } catch (error) {
     return routeErrorResponse(error);
