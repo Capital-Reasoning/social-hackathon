@@ -669,7 +669,7 @@
           <div class="hero-copy">
             <div class="section-label">Track 2 / Food Security Delivery Operations</div>
             <h1>Mealflo Hackathon Writeup</h1>
-            <p>A working coordination app for turning intake, inventory, volunteer availability, and delivery constraints into safer food support routes.</p>
+            <p>A food support delivery app that turns requests, meal inventory, volunteer capacity, and delivery constraints into safer routes.</p>
           </div>
         </section>
 
@@ -683,8 +683,8 @@
                   <h3>Track chosen and problem tackled</h3>
                 </div>
               </div>
-              <p>We chose Track 2: Food Security Delivery Operations. We tackled the coordination problem faced by volunteer-led food delivery programs, where incoming food requests, volunteer availability, meal inventory, routes, client needs, allergies, cold-chain requirements, accessibility constraints, and delivery status all have to be managed at the same time.</p>
-              <p>Our focus was helping a frontline coordinator turn scattered intake, inventory, and volunteer information into safe, assigned delivery routes with less manual work and fewer missed details - supported by a guided delivery system for volunteer drivers.</p>
+              <p>We chose Track 2: Food Security Delivery Operations. We tackled the coordination problem faced by volunteer-led food delivery programs that manage food requests, meal inventory, volunteer availability, allergies, accessibility constraints, cold-chain needs, routes, and delivery status across forms, spreadsheets, messages, phone calls, and memory.</p>
+              <p>Mealflo reduces that burden by making requests, constraints, routes, driver assignments, and delivery progress visible in one place.</p>
             </article>
             <article class="split-section">
               <div class="section-head">
@@ -694,7 +694,7 @@
                   <h3>What we built</h3>
                 </div>
               </div>
-              <p>We built Mealflo, a web application for food support delivery operations. It connects public intake, admin coordination, and a volunteer driver experience, backed by a database layer, route calculation, map-based coordination, and language-model-assisted processing for intake and inventory workflows.</p>
+              <p>We built Mealflo, a working web app for coordinating food support delivery operations. It connects public intake, coordinator operations, and a phone-first volunteer driver experience, backed by a database layer, map-based routing, inventory awareness, and OpenAI-assisted parsing for intake and inventory workflows.</p>
             </article>
           </div>
 
@@ -704,21 +704,21 @@
                 <span class="icon-bubble"><img src="assets/icons/person-plus.webp" alt="" /></span>
                 <h3>Public intake</h3>
               </div>
-              <p>Clients request food support and volunteers sign up to deliver meals. The system captures address, meal count, timing, dietary needs, allergies, availability, vehicle access, cooler capacity, and mobility constraints.</p>
+              <p>Recipients request food support and volunteers offer to deliver. Mealflo captures address, meal count, timing, dietary needs, allergies, mobility constraints, vehicle access, and cooler capacity.</p>
             </article>
             <article class="lane">
               <div class="lane-title">
                 <span class="icon-bubble"><img src="assets/icons/grocery-bag.webp" alt="" /></span>
-                <h3>Admin operations dashboard</h3>
+                <h3>Coordinator dashboard</h3>
               </div>
-              <p>Coordinators review incoming requests, manage client records, view inventory, create routes, assign drivers, and track progress from one operational picture of what needs to happen today.</p>
+              <p>Coordinators review intake, approve structured drafts, check inventory, generate routes, assign drivers, and monitor progress from one operational view.</p>
             </article>
             <article class="lane">
               <div class="lane-title">
                 <span class="icon-bubble"><img src="assets/icons/phone-handset.webp" alt="" /></span>
                 <h3>Volunteer driver view</h3>
               </div>
-              <p>Drivers use a phone-friendly interface to see assigned routes, follow directions one stop at a time, view delivery notes, notify clients, and mark deliveries complete.</p>
+              <p>Drivers choose availability, accept a suggested route, see each stop with delivery notes and meal details, follow the map, and mark stops complete.</p>
             </article>
           </div>
         </section>
@@ -732,45 +732,45 @@
         <section class="page-title">
           <div class="section-label">Operator workflow</div>
           <h2>How a frontline operator would use it on a real Monday morning</h2>
-          <p>The workflow is intentionally low-cognitive-load: review requests, check constraints, assign routes, load meals, guide drivers, and track completion.</p>
+          <p>A frontline coordinator opening Mealflo on a busy Monday can move from scattered information to an actionable delivery plan.</p>
         </section>
 
         <section class="workflow-grid">
           <div class="workflow-panel">
             <article class="step">
               <span class="step-number">1</span>
-              <h3>Review recent requests</h3>
-              <p>Instead of searching through emails, forms, spreadsheets, and messages, the coordinator sees intake in one place with address, quantity, urgency, dietary needs, allergies, mobility needs, and delivery notes.</p>
+              <h3>Review new requests</h3>
+              <p>Instead of searching through emails, forms, spreadsheets, and messages, the coordinator sees incoming requests with address, meal count, urgency, dietary needs, allergies, mobility needs, and delivery notes.</p>
               <img class="step-icon" src="assets/icons/checklist.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">2</span>
-              <h3>Check available inventory</h3>
-              <p>They see which meals or staples are ready for delivery. Entries can be made manually or through uploading a receipt, with meals tagged by allergens or dietary restrictions.</p>
+              <h3>Approve structured intake</h3>
+              <p>Mealflo helps turn intake messages into structured drafts. The coordinator reviews the original request, checks parsed details, and approves delivery work.</p>
               <img class="step-icon" src="assets/icons/fridge.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">3</span>
-              <h3>Review volunteer availability</h3>
-              <p>Mealflo captures driver constraints such as available time, starting location, vehicle access, cooler capacity, stair comfort, and other limitations.</p>
+              <h3>Check meals and drivers</h3>
+              <p>The coordinator sees which meals are ready and which volunteers are available, including time windows, vehicle access, cooler capacity, stair comfort, and other limits.</p>
               <img class="step-icon" src="assets/icons/clock.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">4</span>
-              <h3>Review generated routes</h3>
-              <p>Deliveries are grouped into routes that consider urgency, driver capacity, and food requirements. The coordinator assigns a driver and confirms meals to load.</p>
+              <h3>Generate routes</h3>
+              <p>Deliveries are grouped into route suggestions based on urgency, inventory, location, driver capacity, and food requirements. The coordinator assigns a driver and confirms what to load.</p>
               <img class="step-icon" src="assets/icons/route-stops.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">5</span>
               <h3>Guide the driver</h3>
-              <p>The driver mobile view shows the next stop, address, meals to deliver, delivery notes, and a simple completion button.</p>
+              <p>The driver mobile view shows the next stop, address, meals to deliver, delivery notes, map guidance, and a simple completion action.</p>
               <img class="step-icon" src="assets/icons/phone-handset.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">6</span>
               <h3>Track completion</h3>
-              <p>As stops are completed, the dashboard updates so the operator can see what is out for delivery, complete, and needing follow-up without calling every driver.</p>
+              <p>As stops are completed, the dashboard updates so the coordinator can see what is out for delivery, complete, delayed, or needing follow-up without calling every driver.</p>
               <img class="step-icon" src="assets/icons/checkmark-circle.webp" alt="" />
             </article>
           </div>
@@ -815,7 +815,7 @@
             <span class="icon-bubble"><img src="assets/icons/route-road.webp" alt="" /></span>
             <span>Intended result</span>
           </div>
-          <p>A lower-cognitive-load operating rhythm for frontline food support: every request, constraint, route, driver update, and follow-up action is visible in one place.</p>
+          <p>Mealflo gives frontline coordinators a calmer operating rhythm: requests, constraints, meal availability, routes, driver updates, and follow-up actions are visible in one place.</p>
         </section>
       </main>
 
@@ -828,27 +828,27 @@
           <div class="release-hero">
             <div class="section-label">Next release</div>
             <h2>What we would ship next with one more week</h2>
-            <p>With one more week, we would focus on expanding communication channels and improving real-world delivery coordination.</p>
+            <p>With one more week, we would focus on making Mealflo easier to use in real community operations.</p>
           </div>
 
           <div class="release-grid">
             <article class="release-item">
               <span class="number">01</span>
               <span class="icon-bubble"><img src="assets/icons/person-plus.webp" alt="" /></span>
-              <h3>Connect additional intake sources</h3>
-              <p>Many food support requests do not arrive through a formal web form. They may come through Instagram, Facebook, text message, or direct messages to the organization. We would add these as intake channels so Mealflo can capture requests from the places people already use.</p>
+              <h3>Additional intake channels</h3>
+              <p>Food support requests often come through Instagram, Facebook, text messages, voicemail, email, or direct messages rather than a formal web form. We would add more intake channels so teams can capture requests from the places people already use.</p>
             </article>
             <article class="release-item">
               <span class="number">02</span>
               <span class="icon-bubble"><img src="assets/icons/phone-handset.webp" alt="" /></span>
-              <h3>Add real text messaging</h3>
-              <p>Drivers need simple communication tools during delivery. We would add real text messaging from the driver flow, so a driver could send a genuine SMS through the app using a pre-written message such as: "Hi, this is your meal delivery driver. I'm outside now."</p>
+              <h3>Real SMS communication</h3>
+              <p>Drivers need simple, reliable communication during deliveries. We would add real text messaging from the driver flow, including pre-written messages like: "Hi, this is your meal delivery driver. I'm outside now."</p>
             </article>
             <article class="release-item">
               <span class="number">03</span>
               <span class="icon-bubble blue"><img src="assets/icons/chat-bubble.webp" alt="" /></span>
-              <h3>Get field data from a real organization</h3>
-              <p>Finally, we would get field data from a real organization. That would let us test Mealflo against real intake patterns, delivery constraints, volunteer workflows, and communication needs, so the next version is shaped by frontline operations rather than guided and educated assumptions.</p>
+              <h3>Field testing with a real organization</h3>
+              <p>We would work with a real food support organization to test Mealflo against actual intake patterns, route constraints, volunteer workflows, and communication needs, so the next version is shaped by frontline reality instead of demo assumptions.</p>
             </article>
           </div>
         </section>
@@ -856,7 +856,7 @@
         <section class="one-line-band blue-panel">
           <div>
             <div class="section-label">Mealflo in one line</div>
-            <p class="one-line">A practical coordination layer for food support delivery teams: intake becomes structured, constraints become visible, routes become assignable, and drivers get guided execution on the phone.</p>
+            <p class="one-line">Mealflo turns food support requests, meal inventory, volunteer capacity, and delivery constraints into safer routes and a clearer delivery workflow.</p>
           </div>
           <div class="flow" aria-label="Requests routes delivery">
             <span class="chip">Requests</span>
