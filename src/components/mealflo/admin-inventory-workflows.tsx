@@ -203,6 +203,7 @@ export function AdminInventoryWorkflows({
   const [receiptText, setReceiptText] = useState("");
   const [documentName, setDocumentName] = useState("");
   const [receiptSourceNote, setReceiptSourceNote] = useState("");
+  const [receiptImageDataUrl, setReceiptImageDataUrl] = useState("");
   const [receiptImageName, setReceiptImageName] = useState("");
   const [draft, setDraft] = useState<ParsedInventoryDraft | null>(null);
   const [draftModalOpen, setDraftModalOpen] = useState(false);
@@ -224,7 +225,8 @@ export function AdminInventoryWorkflows({
     name.trim().length >= 2 &&
     Number.parseInt(quantity, 10) > 0 &&
     unit.trim().length > 0;
-  const canParseReceipt = receiptText.trim().length >= 4;
+  const canParseReceipt =
+    receiptText.trim().length >= 4 || receiptImageDataUrl.length > 0;
 
   useEffect(() => {
     if (!draftModalOpen) {
@@ -307,6 +309,7 @@ export function AdminInventoryWorkflows({
       const response = await fetch("/api/inventory/parse", {
         body: JSON.stringify({
           documentName: documentName || undefined,
+          imageDataUrl: receiptImageDataUrl || undefined,
           rawText: receiptText,
           sourceNote: receiptSourceNote || undefined,
         }),
@@ -674,13 +677,35 @@ export function AdminInventoryWorkflows({
                 className="sr-only"
                 type="file"
                 onChange={(event) => {
-                  const fileName = event.target.files?.[0]?.name ?? "";
+                  const file = event.target.files?.[0];
+                  const fileName = file?.name ?? "";
+
                   setReceiptImageName(fileName);
+                  setReceiptImageDataUrl("");
                   setParseStatus(
                     fileName
-                      ? `${fileName} attached. Add receipt text or use the sample receipt to parse.`
+                      ? `Reading ${fileName}.`
                       : "Upload, paste, or use the sample receipt."
                   );
+
+                  if (!file) {
+                    return;
+                  }
+
+                  const reader = new FileReader();
+
+                  reader.addEventListener("load", () => {
+                    setReceiptImageDataUrl(
+                      typeof reader.result === "string" ? reader.result : ""
+                    );
+                    setParseStatus(
+                      `${fileName} attached. Parse the receipt to stage draft items.`
+                    );
+                  });
+                  reader.addEventListener("error", () => {
+                    setParseStatus("Receipt image could not be read.");
+                  });
+                  reader.readAsDataURL(file);
                 }}
               />
             </label>

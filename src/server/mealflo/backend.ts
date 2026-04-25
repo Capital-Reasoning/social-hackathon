@@ -3021,7 +3021,16 @@ export async function parseInventoryDocument(
   rawInput: z.input<typeof inventoryParseSchema>
 ) {
   const input = inventoryParseSchema.parse(rawInput);
-  const textDraft = parseReceiptInventoryDraft(input);
+  const hasRawText = input.rawText.trim().length > 0;
+  const textDraft =
+    input.imageDataUrl && !hasRawText
+      ? {
+          confidence: 0,
+          documentName: input.documentName,
+          items: [],
+          sourceNote: input.sourceNote,
+        }
+      : parseReceiptInventoryDraft(input);
 
   if (!input.imageDataUrl || !serverEnv.hasOpenAi) {
     return textDraft;
