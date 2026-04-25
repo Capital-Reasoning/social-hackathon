@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mealflo Hackathon Writeup</title>
+    <style>
+      @font-face {
+        font-family: "Outfit";
+        src: url("../../design/fonts/Outfit-VariableFont_wght.ttf") format("truetype");
+        font-weight: 100 900;
+      }
+
+      @font-face {
+        font-family: "DM Sans";
+        src: url("../../design/fonts/DMSans-VariableFont_opsz_wght.ttf") format("truetype");
+        font-weight: 100 900;
+      }
+
+      @page {
+        size: letter landscape;
+        margin: 0;
+      }
+
+      :root {
+        --bg: #fffdf0;
+        --surface: #ffffff;
+        --surface-tint: #fdf8e4;
+        --yellow: #fae278;
+        --yellow-soft: #fef9d4;
+        --blue-soft: #f0f3ff;
+        --blue-line: #dce3fe;
+        --action: #3d5cf5;
+        --action-soft: #7890fa;
+        --ink: #1c1c2e;
+        --navy: #143d73;
+        --mid: #4e4e72;
+        --muted: #6d7894;
+        --border: rgba(24, 24, 60, 0.14);
+        --border-strong: rgba(24, 24, 60, 0.24);
+        --success: #4ead6f;
+        --warning: #f0a830;
+        --danger: #e05050;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: #dce3fe;
+        color: var(--ink);
+        font-family: "DM Sans", sans-serif;
+      }
+
+      body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .page {
+        position: relative;
+        width: 11in;
+        height: 8.5in;
+        overflow: hidden;
+        break-after: page;
+        background:
+          linear-gradient(142deg, rgba(255, 253, 240, 0.98) 0%, rgba(255, 248, 228, 0.96) 44%, rgba(240, 243, 255, 0.92) 100%),
+          conic-gradient(from 236deg at 72% -18%, rgba(120, 144, 250, 0.34), rgba(255, 205, 214, 0.28), rgba(250, 226, 120, 0.34), rgba(255, 253, 240, 0.2));
+        padding: 42px 48px 32px;
+      }
+
+      .page::before {
+        content: "";
+        position: absolute;
+        inset: -76px -86px auto auto;
+        width: 610px;
+        height: 318px;
+        background: linear-gradient(126deg, rgba(120, 144, 250, 0.28), rgba(255, 205, 214, 0.38) 50%, rgba(250, 226, 120, 0.32));
+        clip-path: polygon(8% 21%, 100% 0, 93% 73%, 27% 100%, 0 61%);
+        opacity: 0.9;
+      }
+
+      .page::after {
+        content: "";
+        position: absolute;
+        left: -120px;
+        bottom: -96px;
+        width: 560px;
+        height: 260px;
+        background: linear-gradient(113deg, rgba(120, 144, 250, 0.18), rgba(255, 253, 240, 0));
+        clip-path: polygon(0 22%, 74% 0, 100% 70%, 18% 100%);
+        opacity: 0.95;
+      }
+
+      .page > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .footer {
+        position: absolute;
+        left: 58px;
+        right: 58px;
+        bottom: 16px;
+        display: flex;
+        justify-content: space-between;
+        border-top: 1.5px solid var(--blue-line);
+        padding-top: 9px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .topbar {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: 158px 1fr auto;
+        gap: 18px;
+        align-items: center;
+        height: 56px;
+        padding: 0 18px;
+        border: 1.5px solid var(--border);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.92);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--navy);
+        font-family: "Outfit", sans-serif;
+        font-size: 25px;
+        font-weight: 560;
+      }
+
+      .brand img {
+        width: 33px;
+        height: 33px;
+        object-fit: contain;
+      }
+
+      .nav,
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .tab,
+      .button,
+      .chip {
+        min-height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        border: 1.5px solid var(--border);
+        font-size: 13px;
+        line-height: 1;
+        white-space: nowrap;
+      }
+
+      .tab {
+        min-width: 76px;
+        padding: 0 18px;
+        background: var(--blue-soft);
+        color: var(--navy);
+      }
+
+      .tab.active {
+        border-color: var(--navy);
+        background: var(--navy);
+        color: white;
+      }
+
+      .button {
+        padding: 0 16px;
+        background: var(--blue-soft);
+        color: var(--navy);
+      }
+
+      .button.volunteer {
+        background: var(--surface-tint);
+      }
+
+      .role {
+        position: absolute;
+        top: 31px;
+        right: 66px;
+        z-index: 3;
+        color: var(--action);
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .panel {
+        border: 1.5px solid var(--border);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.88);
+      }
+
+      .tint-panel {
+        border: 1.5px solid var(--border);
+        border-radius: 24px;
+        background: var(--surface-tint);
+      }
+
+      .blue-panel {
+        border: 1.5px solid var(--border);
+        border-radius: 24px;
+        background: var(--blue-soft);
+      }
+
+      .section-label {
+        color: var(--action);
+        font-size: 13px;
+        font-weight: 650;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1,
+      h2,
+      h3,
+      .number,
+      .metric-value,
+      .one-line {
+        font-family: "Outfit", sans-serif;
+      }
+
+      h1 {
+        color: var(--navy);
+        font-size: 39px;
+        font-weight: 640;
+        line-height: 1.04;
+      }
+
+      h2 {
+        color: var(--navy);
+        font-size: 29px;
+        font-weight: 600;
+        line-height: 1.08;
+      }
+
+      h3 {
+        color: var(--navy);
+        font-size: 19px;
+        font-weight: 590;
+        line-height: 1.12;
+      }
+
+      p {
+        color: var(--ink);
+        font-size: 12.6px;
+        line-height: 1.32;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .icon {
+        width: 34px;
+        height: 34px;
+        object-fit: contain;
+      }
+
+      .icon-bubble {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--yellow-soft);
+        flex: 0 0 auto;
+      }
+
+      .icon-bubble.blue {
+        background: var(--blue-soft);
+      }
+
+      .icon-bubble img {
+        width: 27px;
+        height: 27px;
+        object-fit: contain;
+      }
+
+      .hero {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 354px;
+        gap: 26px;
+        align-items: center;
+        margin-top: 0;
+        padding: 24px 32px;
+      }
+
+      .hero::before,
+      .release-hero::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 28px;
+        bottom: 28px;
+        width: 8px;
+        border-radius: 999px;
+        background: var(--yellow);
+      }
+
+      .hero-copy {
+        padding-left: 10px;
+      }
+
+      .hero-copy .section-label {
+        margin-bottom: 18px;
+      }
+
+      .hero-copy h1 {
+        margin-bottom: 18px;
+      }
+
+      .hero-copy p {
+        max-width: 640px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.28;
+      }
+
+      .metrics-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        border: 0;
+        border-radius: 0;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      .metric {
+        min-height: 62px;
+        display: grid;
+        grid-template-columns: 38px 1fr;
+        gap: 10px;
+        align-items: center;
+        padding: 8px 12px;
+        border-right: 1.5px solid var(--border);
+        border-bottom: 1.5px solid var(--border);
+      }
+
+      .metric:nth-child(2),
+      .metric:nth-child(4) {
+        border-right: 0;
+      }
+
+      .metric:nth-child(3),
+      .metric:nth-child(4) {
+        border-bottom: 0;
+      }
+
+      .metric-value {
+        display: block;
+        color: var(--navy);
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 1;
+      }
+
+      .metric-label {
+        display: block;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .split-panel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        margin-top: 20px;
+        min-height: 172px;
+        overflow: hidden;
+      }
+
+      .split-section {
+        padding: 22px 34px 20px;
+      }
+
+      .split-section + .split-section {
+        border-left: 1.5px solid var(--border);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+
+      .section-head .section-label {
+        margin-bottom: 9px;
+      }
+
+      .section-head h3 {
+        margin-top: 0;
+      }
+
+      .split-section p + p {
+        margin-top: 10px;
+      }
+
+      .lanes {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        margin-top: 20px;
+        min-height: 128px;
+        overflow: hidden;
+      }
+
+      .lane {
+        padding: 18px 24px;
+      }
+
+      .lane + .lane {
+        border-left: 1.5px solid var(--border);
+      }
+
+      .lane-title {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        margin-bottom: 12px;
+      }
+
+      .lane h3 {
+        font-size: 18px;
+      }
+
+      .page-title {
+        margin-top: 6px;
+        max-width: 720px;
+      }
+
+      .page-title .section-label {
+        margin-bottom: 18px;
+      }
+
+      .page-title h2 {
+        margin-bottom: 8px;
+      }
+
+      .page-title p {
+        color: var(--muted);
+        font-size: 14.4px;
+      }
+
+      .workflow-grid {
+        display: grid;
+        grid-template-columns: 1fr 276px;
+        gap: 24px;
+        margin-top: 16px;
+      }
+
+      .workflow-panel {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        border: 1.5px solid var(--border);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.88);
+        overflow: hidden;
+      }
+
+      .step {
+        position: relative;
+        min-height: 96px;
+        padding: 17px 20px 14px 62px;
+      }
+
+      .step:nth-child(odd) {
+        border-right: 1.5px solid var(--border);
+      }
+
+      .step:nth-child(-n + 4) {
+        border-bottom: 1.5px solid var(--border);
+      }
+
+      .step-number {
+        position: absolute;
+        left: 22px;
+        top: 18px;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--yellow);
+        color: var(--navy);
+        font-weight: 700;
+      }
+
+      .step h3 {
+        margin-bottom: 10px;
+        font-size: 17.2px;
+      }
+
+      .step p {
+        font-size: 11.3px;
+        line-height: 1.25;
+      }
+
+      .ops-panel {
+        display: grid;
+        grid-template-rows: 148px 1fr;
+        border: 1.5px solid var(--border);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.9);
+        overflow: hidden;
+      }
+
+      .ops-map,
+      .ready-table {
+        padding: 20px 24px;
+      }
+
+      .ops-map {
+        border-bottom: 1.5px solid var(--border);
+      }
+
+      .ops-map h3,
+      .ready-table h3 {
+        margin-top: 10px;
+        font-size: 18px;
+      }
+
+      .map-visual {
+        position: relative;
+        height: 58px;
+        margin-top: 10px;
+        overflow: hidden;
+        border-radius: 18px;
+        background: var(--blue-soft);
+      }
+
+      .map-visual svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .map-note {
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 11.4px;
+      }
+
+      th {
+        padding: 0 0 8px;
+        color: var(--muted);
+        font-weight: 500;
+        text-align: left;
+      }
+
+      th:not(:first-child),
+      td:not(:first-child) {
+        text-align: center;
+      }
+
+      td {
+        padding: 6px 0;
+        border-top: 1.5px solid var(--border);
+      }
+
+      .view-all {
+        display: block;
+        margin-top: 4px;
+        color: var(--action);
+        font-size: 12px;
+        text-align: right;
+      }
+
+      .result-band {
+        display: grid;
+        grid-template-columns: 190px 1fr;
+        gap: 28px;
+        align-items: center;
+        margin-top: 16px;
+        padding: 16px 26px;
+        border-color: rgba(240, 168, 48, 0.52);
+        background: var(--yellow-soft);
+      }
+
+      .result-title {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        color: var(--navy);
+        font-family: "Outfit", sans-serif;
+        font-size: 21px;
+      }
+
+      .release-hero {
+        position: relative;
+        margin-top: 0;
+        padding: 28px 36px;
+      }
+
+      .release-hero h2 {
+        margin-top: 22px;
+        margin-bottom: 12px;
+      }
+
+      .release-hero p {
+        color: var(--muted);
+        font-size: 16px;
+        max-width: 720px;
+      }
+
+      .release-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        margin-top: 24px;
+        min-height: 218px;
+        overflow: hidden;
+      }
+
+      .release-item {
+        position: relative;
+        padding: 28px 32px 24px;
+      }
+
+      .release-item + .release-item {
+        border-left: 1.5px solid var(--border);
+      }
+
+      .number {
+        display: inline-flex;
+        width: 56px;
+        height: 36px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: var(--navy);
+        color: #fff;
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .release-item .icon-bubble {
+        position: absolute;
+        right: 32px;
+        top: 28px;
+      }
+
+      .release-item h3 {
+        margin: 36px 0 14px;
+        max-width: 230px;
+      }
+
+      .release-item p {
+        font-size: 12.6px;
+        line-height: 1.3;
+      }
+
+      .one-line-band {
+        display: grid;
+        grid-template-columns: 1fr 286px;
+        gap: 32px;
+        align-items: center;
+        margin-top: 20px;
+        padding: 20px 34px;
+      }
+
+      .one-line-band .section-label {
+        margin-bottom: 14px;
+      }
+
+      .one-line {
+        max-width: 660px;
+        color: var(--navy);
+        font-size: 18px;
+        line-height: 1.18;
+      }
+
+      .flow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .flow .chip {
+        min-width: 78px;
+        background: #fff;
+        color: var(--navy);
+        font-size: 12px;
+      }
+
+      .flow-line {
+        height: 1.5px;
+        width: 12px;
+        background: var(--border-strong);
+      }
+
+      @media print {
+        html,
+        body {
+          width: 11in;
+          background: transparent;
+        }
+
+        .page {
+          margin: 0;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="page">
+      <main>
+        <section class="hero panel">
+          <div class="hero-copy">
+            <div class="section-label">Track 2 / Food Security Delivery Operations</div>
+            <h1>Mealflo Hackathon Writeup</h1>
+            <p>A working coordination app for turning intake, inventory, volunteer availability, and delivery constraints into safer food support routes.</p>
+          </div>
+          <div class="metrics-strip" aria-label="Operations snapshot">
+            <div class="metric">
+              <span class="icon-bubble"><img src="../../design/assets/icons/checklist.png" alt="" /></span>
+              <span><span class="metric-value">4 items</span><span class="metric-label">Waiting for review</span></span>
+            </div>
+            <div class="metric">
+              <span class="icon-bubble"><img src="../../design/assets/icons/grocery-bag.png" alt="" /></span>
+              <span><span class="metric-value">23 requests</span><span class="metric-label">Ready today</span></span>
+            </div>
+            <div class="metric">
+              <span class="icon-bubble"><img src="../../design/assets/icons/route-road.png" alt="" /></span>
+              <span><span class="metric-value">5 routes</span><span class="metric-label">Ready to assign</span></span>
+            </div>
+            <div class="metric">
+              <span class="icon-bubble"><img src="../../design/assets/icons/meal-container.png" alt="" /></span>
+              <span><span class="metric-value">100 meals</span><span class="metric-label">Ready for delivery</span></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="split-panel panel">
+          <article class="split-section">
+            <div class="section-head">
+              <span class="icon-bubble blue"><img src="../../design/assets/icons/warning-alert.png" alt="" /></span>
+              <div>
+                <div class="section-label">Problem</div>
+                <h3>Track chosen and problem tackled</h3>
+              </div>
+            </div>
+            <p>We chose Track 2: Food Security Delivery Operations. We tackled the coordination problem faced by volunteer-led food delivery programs, where incoming food requests, volunteer availability, meal inventory, routes, client needs, allergies, cold-chain requirements, accessibility constraints, and delivery status all have to be managed at the same time.</p>
+            <p>Our focus was helping a frontline coordinator turn scattered intake, inventory, and volunteer information into safe, assigned delivery routes with less manual work and fewer missed details - supported by a guided delivery system for volunteer drivers.</p>
+          </article>
+          <article class="split-section">
+            <div class="section-head">
+              <span class="icon-bubble"><img src="../../design/assets/icons/checkmark-circle.png" alt="" /></span>
+              <div>
+                <div class="section-label">Working web app</div>
+                <h3>What we built</h3>
+              </div>
+            </div>
+            <p>We built Mealflo, a web application for food support delivery operations. It connects public intake, admin coordination, and a volunteer driver experience, backed by a database layer, route calculation, map-based coordination, and language-model-assisted processing for intake and inventory workflows.</p>
+          </article>
+        </section>
+
+        <section class="lanes tint-panel">
+          <article class="lane">
+            <div class="lane-title">
+              <span class="icon-bubble"><img src="../../design/assets/icons/person-plus.png" alt="" /></span>
+              <h3>Public intake</h3>
+            </div>
+            <p>Clients request food support and volunteers sign up to deliver meals. The system captures address, meal count, timing, dietary needs, allergies, availability, vehicle access, cooler capacity, and mobility constraints.</p>
+          </article>
+          <article class="lane">
+            <div class="lane-title">
+              <span class="icon-bubble"><img src="../../design/assets/icons/grocery-bag.png" alt="" /></span>
+              <h3>Admin operations dashboard</h3>
+            </div>
+            <p>Coordinators review incoming requests, manage client records, view inventory, create routes, assign drivers, and track progress from one operational picture of what needs to happen today.</p>
+          </article>
+          <article class="lane">
+            <div class="lane-title">
+              <span class="icon-bubble"><img src="../../design/assets/icons/phone-handset.png" alt="" /></span>
+              <h3>Volunteer driver view</h3>
+            </div>
+            <p>Drivers use a phone-friendly interface to see assigned routes, follow directions one stop at a time, view delivery notes, notify clients, and mark deliveries complete.</p>
+          </article>
+        </section>
+      </main>
+
+      <footer class="footer"><span>Mealflo Hackathon Writeup</span><span>1</span></footer>
+    </section>
+
+    <section class="page">
+      <main>
+        <section class="page-title">
+          <div class="section-label">Operator workflow</div>
+          <h2>How a frontline operator would use it on a real Monday morning</h2>
+          <p>The workflow is intentionally low-cognitive-load: review requests, check constraints, assign routes, load meals, guide drivers, and track completion.</p>
+        </section>
+
+        <section class="workflow-grid">
+          <div class="workflow-panel">
+            <article class="step">
+              <span class="step-number">1</span>
+              <h3>Review recent requests</h3>
+              <p>Instead of searching through emails, forms, spreadsheets, and messages, the coordinator sees intake in one place with address, quantity, urgency, dietary needs, allergies, mobility needs, and delivery notes.</p>
+            </article>
+            <article class="step">
+              <span class="step-number">2</span>
+              <h3>Check available inventory</h3>
+              <p>They see which meals or staples are ready for delivery. Entries can be made manually or through uploading a receipt, with meals tagged by allergens or dietary restrictions.</p>
+            </article>
+            <article class="step">
+              <span class="step-number">3</span>
+              <h3>Review volunteer availability</h3>
+              <p>Mealflo captures driver constraints such as available time, starting location, vehicle access, cooler capacity, stair comfort, and other limitations.</p>
+            </article>
+            <article class="step">
+              <span class="step-number">4</span>
+              <h3>Review generated routes</h3>
+              <p>Deliveries are grouped into routes that consider urgency, driver capacity, and food requirements. The coordinator assigns a driver and confirms meals to load.</p>
+            </article>
+            <article class="step">
+              <span class="step-number">5</span>
+              <h3>Guide the driver</h3>
+              <p>The driver mobile view shows the next stop, address, meals to deliver, delivery notes, and a simple completion button.</p>
+            </article>
+            <article class="step">
+              <span class="step-number">6</span>
+              <h3>Track completion</h3>
+              <p>As stops are completed, the dashboard updates so the operator can see what is out for delivery, complete, and needing follow-up without calling every driver.</p>
+            </article>
+          </div>
+
+          <aside class="ops-panel">
+            <section class="ops-map">
+              <div class="section-label">Live map</div>
+              <h3>Delivery coordination snapshot</h3>
+              <div class="map-visual" aria-label="Route map illustration">
+                <svg viewBox="0 0 252 78" aria-hidden="true">
+                  <path d="M8 58 C56 8 88 67 136 34 S198 23 244 10" fill="none" stroke="#dce3fe" stroke-width="15" />
+                  <path d="M18 56 C62 20 93 58 132 39 S192 30 232 14" fill="none" stroke="#1f66b3" stroke-width="5" stroke-linecap="round" />
+                  <circle cx="46" cy="39" r="7" fill="#f0a830" />
+                  <circle cx="126" cy="42" r="7" fill="#3d5cf5" />
+                  <circle cx="157" cy="20" r="7" fill="#4ead6f" />
+                  <circle cx="210" cy="24" r="7" fill="#fae278" />
+                </svg>
+                <div class="map-note"><span>0 active</span><span>updates as stops complete</span></div>
+              </div>
+            </section>
+            <section class="ready-table">
+              <div class="section-label">Ready today</div>
+              <h3>Coordinator view</h3>
+              <table>
+                <thead>
+                  <tr><th>Client</th><th>Urgency</th><th>Meals</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Mabel Hart</td><td>9</td><td>2</td></tr>
+                  <tr><td>Keisha Noor</td><td>9</td><td>2</td></tr>
+                  <tr><td>Noel Okafor</td><td>9</td><td>3</td></tr>
+                  <tr><td>Priya Sandhu</td><td>9</td><td>3</td></tr>
+                </tbody>
+              </table>
+              <span class="view-all">View all</span>
+            </section>
+          </aside>
+        </section>
+
+        <section class="result-band panel">
+          <div class="result-title">
+            <span class="icon-bubble"><img src="../../design/assets/icons/route-road.png" alt="" /></span>
+            <span>Intended result</span>
+          </div>
+          <p>A lower-cognitive-load operating rhythm for frontline food support: every request, constraint, route, driver update, and follow-up action is visible in one place.</p>
+        </section>
+      </main>
+
+      <footer class="footer"><span>Mealflo Hackathon Writeup</span><span>2</span></footer>
+    </section>
+
+    <section class="page">
+      <main>
+        <section class="release-hero panel">
+          <div class="section-label">Next release</div>
+          <h2>What we would ship next with one more week</h2>
+          <p>With one more week, we would focus on expanding communication channels and improving real-world delivery coordination.</p>
+        </section>
+
+        <section class="release-grid panel">
+          <article class="release-item">
+            <span class="number">01</span>
+            <span class="icon-bubble"><img src="../../design/assets/icons/person-plus.png" alt="" /></span>
+            <h3>Connect additional intake sources</h3>
+            <p>Many food support requests do not arrive through a formal web form. They may come through Instagram, Facebook, text message, or direct messages to the organization. We would add these as intake channels so Mealflo can capture requests from the places people already use.</p>
+          </article>
+          <article class="release-item">
+            <span class="number">02</span>
+            <span class="icon-bubble"><img src="../../design/assets/icons/phone-handset.png" alt="" /></span>
+            <h3>Add real text messaging</h3>
+            <p>Drivers need simple communication tools during delivery. We would add real text messaging from the driver flow, so a driver could send a genuine SMS through the app using a pre-written message such as: "Hi, this is your meal delivery driver. I'm outside now."</p>
+          </article>
+          <article class="release-item">
+            <span class="number">03</span>
+            <span class="icon-bubble blue"><img src="../../design/assets/icons/chat-bubble.png" alt="" /></span>
+            <h3>Get field data from a real organization</h3>
+            <p>Finally, we would get field data from a real organization. That would let us test Mealflo against real intake patterns, delivery constraints, volunteer workflows, and communication needs, so the next version is shaped by frontline operations rather than guided and educated assumptions.</p>
+          </article>
+        </section>
+
+        <section class="one-line-band blue-panel">
+          <div>
+            <div class="section-label">Mealflo in one line</div>
+            <p class="one-line">A practical coordination layer for food support delivery teams: intake becomes structured, constraints become visible, routes become assignable, and drivers get guided execution on the phone.</p>
+          </div>
+          <div class="flow" aria-label="Requests routes delivery">
+            <span class="chip">Requests</span>
+            <span class="flow-line"></span>
+            <span class="chip">Routes</span>
+            <span class="flow-line"></span>
+            <span class="chip">Delivery</span>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer"><span>Mealflo Hackathon Writeup</span><span>3</span></footer>
+    </section>
+  </body>
+</html>

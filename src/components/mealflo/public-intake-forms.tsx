@@ -9,6 +9,7 @@ import {
   randomRequestDemoFill,
   randomVolunteerDemoFill,
 } from "@/lib/mealflo-demo-intake";
+import { inferFoodConstraintsFromText } from "@/lib/mealflo-food-constraints";
 
 type SubmitState =
   | {
@@ -75,79 +76,6 @@ function fillFormFields(
       field.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }
-}
-
-function inferRequestConstraints(value: string) {
-  const text = value.toLowerCase();
-  const dietaryTags = new Set<string>();
-  const allergenFlags = new Set<string>();
-
-  if (/\b(low[-\s]?sodium|low[-\s]?salt|lower[-\s]?salt)\b/.test(text)) {
-    dietaryTags.add("low_sodium");
-  }
-
-  if (/\b(vegetarian|no meat)\b/.test(text)) {
-    dietaryTags.add("vegetarian");
-  }
-
-  if (/\bvegan\b/.test(text)) {
-    dietaryTags.add("vegan");
-  }
-
-  if (/\b(gluten[-\s]?free|celiac)\b/.test(text)) {
-    dietaryTags.add("gluten_free");
-  }
-
-  if (/\b(soft|pureed|minced|easy to chew)\b/.test(text)) {
-    dietaryTags.add("soft_food");
-  }
-
-  if (/\b(diabetic|diabetes)\b/.test(text)) {
-    dietaryTags.add("diabetic_friendly");
-  }
-
-  if (/\b(dairy[-\s]?free|lactose[-\s]?free)\b/.test(text)) {
-    dietaryTags.add("dairy_free");
-  }
-
-  if (/\bhalal\b/.test(text)) {
-    dietaryTags.add("halal");
-  }
-
-  if (/\bpeanut|peanuts|nut allergy|no nuts|tree nuts?\b/.test(text)) {
-    allergenFlags.add(
-      /\btree nuts?\b/.test(text) && !/\bpeanut/.test(text)
-        ? "tree_nut"
-        : "peanut"
-    );
-  }
-
-  if (/\bshellfish\b/.test(text)) {
-    allergenFlags.add("shellfish");
-  }
-
-  if (/\begg allergy|no eggs?\b/.test(text)) {
-    allergenFlags.add("egg");
-  }
-
-  if (/\b(fish allergy|no fish)\b/.test(text)) {
-    allergenFlags.add("fish");
-  }
-
-  if (/\b(wheat allergy|no wheat)\b/.test(text)) {
-    allergenFlags.add("wheat");
-  }
-
-  if (/\b(dairy allergy)\b/.test(text)) {
-    allergenFlags.add("dairy");
-  }
-
-  return {
-    allergenFlags: Array.from(allergenFlags),
-    coldChainRequired:
-      /\b(chilled|frozen|cold|refrigerated|fridge|cooler)\b/.test(text),
-    dietaryTags: Array.from(dietaryTags),
-  };
 }
 
 function parseAvailabilityText(value: FormDataEntryValue | null) {
@@ -297,18 +225,19 @@ function DemoGeneratePrompt({ onGenerate }: { onGenerate: () => void }) {
           </p>
         </div>
       </div>
-      <button
+      <Button
         type="button"
-        className="border-action bg-action hover:border-action-strong hover:bg-action-strong inline-flex h-[76px] min-w-[300px] shrink-0 items-center justify-center gap-3 rounded-[16px] border-[1.5px] px-9 leading-none text-[var(--mf-color-on-action)] shadow-[0_10px_24px_rgba(61,92,245,0.2)] transition-[transform,background-color,border-color,opacity] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)] active:scale-[0.97]"
+        variant="primary"
+        className="h-[76px] min-w-[300px] shrink-0 gap-3 rounded-[16px] px-9 leading-none shadow-[0_10px_24px_rgba(61,92,245,0.2)]"
         style={{
           fontSize: "clamp(1.7rem, 2.5vw, 2.1rem)",
           fontWeight: 800,
         }}
         onClick={onGenerate}
+        leading={<MealfloIcon name="pencil-edit" size={36} />}
       >
-        <MealfloIcon name="pencil-edit" size={36} />
-        <span>Generate</span>
-      </button>
+        Generate
+      </Button>
     </div>
   );
 }
@@ -341,7 +270,7 @@ export function PublicRequestForm() {
     const formData = new FormData(form);
     const name = splitName(formData.get("name"));
     const message = String(formData.get("message") ?? "").trim();
-    const constraints = inferRequestConstraints(message);
+    const constraints = inferFoodConstraintsFromText(message);
 
     try {
       const draftId = await submitJson("/api/intake/request", {

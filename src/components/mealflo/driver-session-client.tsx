@@ -24,6 +24,8 @@ type DriverSessionClientProps = {
   volunteerId: string;
 };
 
+const DRIVER_SESSION_HEARTBEAT_INTERVAL_MS = 3_000;
+
 function getDeviceFingerprint() {
   const existing = window.localStorage.getItem("mealflo-device-fingerprint");
 
@@ -258,7 +260,7 @@ export function DriverSessionClient({
       heartbeat().catch(() => {
         setStatusText("Location update missed. Retrying.");
       });
-    }, 15_000);
+    }, DRIVER_SESSION_HEARTBEAT_INTERVAL_MS);
 
     heartbeat().catch(() => {
       setStatusText("Location update missed. Retrying.");

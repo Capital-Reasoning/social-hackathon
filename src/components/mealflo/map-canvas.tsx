@@ -29,6 +29,7 @@ type MapCanvasProps = {
   children?: ReactNode;
   initialView?: "markers" | "greater-victoria";
   interactionLocked?: boolean;
+  markerScale?: "regular" | "large";
   markerStyle?: "label" | "dot" | "icon";
   markers: readonly MarkerPoint[];
   activePath?: readonly (readonly [number, number])[];
@@ -215,6 +216,7 @@ export function MapCanvas({
   futurePath,
   initialView = "markers",
   interactionLocked = false,
+  markerScale = "regular",
   markerStyle = "label",
   markers,
   path,
@@ -379,33 +381,60 @@ export function MapCanvas({
       const el = document.createElement("div");
       el.setAttribute(
         "aria-label",
-        marker.description ? `${marker.label}, ${marker.description}` : marker.label
+        marker.description
+          ? `${marker.label}, ${marker.description}`
+          : marker.label
       );
       el.tabIndex = 0;
 
-      if (markerStyle === "dot") {
+      const iconMarkerClass =
+        markerScale === "large"
+          ? "mealflo-map-marker relative flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border-[2px] border-white/95 bg-white/90 shadow-[0_8px_20px_rgba(24,24,60,0.18)] transition-[transform,box-shadow] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-standard)] hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.72)]"
+          : "mealflo-map-marker relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-white/95 bg-white/90 shadow-[0_6px_16px_rgba(24,24,60,0.14)] transition-[transform,box-shadow] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-standard)] hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.72)]";
+      const iconSize =
+        marker.icon === "delivery-van"
+          ? markerScale === "large"
+            ? "42px"
+            : "32px"
+          : markerScale === "large"
+            ? "34px"
+            : "27px";
+
+      if (marker.icon && markerStyle !== "label") {
+        el.className = iconMarkerClass;
+        el.style.borderColor = toneBorders[marker.tone];
+
+        const image = document.createElement("img");
+        image.alt = "";
+        image.src = markerIcons[marker.icon].src;
+        image.style.width = iconSize;
+        image.style.height = iconSize;
+        image.style.objectFit = "contain";
+        el.append(image);
+      } else if (markerStyle === "dot") {
         el.className =
-          "mealflo-map-marker relative flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border-[2px] border-white/95 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.72)]";
+          markerScale === "large"
+            ? "mealflo-map-marker relative flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border-[3px] border-white/95 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.72)]"
+            : "mealflo-map-marker relative flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border-[2px] border-white/95 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.72)]";
         el.style.backgroundColor = toneColors[marker.tone];
         el.style.boxShadow = "0 2px 7px rgba(24, 24, 60, 0.24)";
 
         const innerDot = document.createElement("span");
-        innerDot.style.width = "6px";
-        innerDot.style.height = "6px";
+        innerDot.style.width = markerScale === "large" ? "8px" : "6px";
+        innerDot.style.height = markerScale === "large" ? "8px" : "6px";
         innerDot.style.borderRadius = "999px";
         innerDot.style.backgroundColor = "#1c1c2e";
         innerDot.style.opacity = "0.72";
         el.append(innerDot);
       } else if (markerStyle === "icon") {
-        el.className =
-          "mealflo-map-marker relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] border-white/95 bg-white/90 shadow-[0_6px_16px_rgba(24,24,60,0.14)] transition-[transform,box-shadow] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-standard)] hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.72)]";
+        el.className = iconMarkerClass;
         el.style.borderColor = toneBorders[marker.tone];
 
         const image = document.createElement("img");
         image.alt = "";
         image.src = markerIcons[marker.icon ?? "location-pin"].src;
-        image.style.width = marker.icon === "delivery-van" ? "32px" : "27px";
-        image.style.height = marker.icon === "delivery-van" ? "32px" : "27px";
+        image.style.width = iconSize;
+        image.style.height = iconSize;
         image.style.objectFit = "contain";
         el.append(image);
       } else {
@@ -524,6 +553,7 @@ export function MapCanvas({
     futurePath,
     initialView,
     mapLoaded,
+    markerScale,
     markerStyle,
     markers,
     path,

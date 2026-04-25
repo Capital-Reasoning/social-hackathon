@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import { serverEnv } from "@/lib/config/server-env";
+import {
+  inferFoodConstraintsFromText,
+  normalizeFoodConstraints,
+} from "@/lib/mealflo-food-constraints";
 
 export const parserVersionFallback = "heuristic-intake-v1";
 export const parserVersionOpenAi = "openai-structured-intake-v1";
@@ -131,16 +135,6 @@ function clampConfidence(score: number) {
   return Math.min(Math.max(Math.round(score), 35), 98);
 }
 
-function unique(values: Array<string | null | undefined>) {
-  return Array.from(
-    new Set(
-      values
-        .map((value) => cleanText(value).toLowerCase().replace(/\s+/g, "_"))
-        .filter(Boolean)
-    )
-  );
-}
-
 function titleCase(value: string) {
   return cleanText(value)
     .split(" ")
@@ -266,28 +260,6 @@ function inferDueBucket(value: string) {
   return "tomorrow" as const;
 }
 
-function inferDietaryTags(value: string) {
-  return unique([
-    /\blow[-\s]?sodium\b/i.test(value) ? "low_sodium" : null,
-    /\bgluten[-\s]?free\b/i.test(value) ? "gluten_free" : null,
-    /\bvegetarian\b/i.test(value) ? "vegetarian" : null,
-    /\bsoft\b|\bpureed\b|\bminced\b/i.test(value) ? "soft_food" : null,
-    /\bdiabetic\b|\bdiabetes\b/i.test(value) ? "diabetic_friendly" : null,
-    /\bdairy[-\s]?free\b|\blactose[-\s]?free\b/i.test(value)
-      ? "dairy_free"
-      : null,
-  ]);
-}
-
-function inferAllergenFlags(value: string) {
-  return unique([
-    /\bpeanut|nut allergy\b/i.test(value) ? "peanut" : null,
-    /\bshellfish\b/i.test(value) ? "shellfish" : null,
-    /\bdairy allergy\b/i.test(value) ? "dairy" : null,
-    /\bgluten allergy|celiac\b/i.test(value) ? "gluten" : null,
-  ]);
-}
-
 function inferRequestSummary(payload: ParsedRequestPayload) {
   return `${payload.dueBucket} ${payload.requestedMealCount}-meal request from ${payload.municipality}.`;
 }
@@ -381,6 +353,7 @@ function fallbackRequestParse(source: RawIntakeSource): ParsedIntakeDraft {
     ],
     Math.max(2, householdSize)
   );
+  const foodConstraints = inferFoodConstraintsFromText(searchable);
   const lowConfidenceFields = [
     ...name.lowConfidenceFields,
     address.lowConfidence ? "addressLine1" : null,
@@ -394,13 +367,11 @@ function fallbackRequestParse(source: RawIntakeSource): ParsedIntakeDraft {
 
   const payload: ParsedRequestPayload = {
     addressLine1: address.addressLine1,
-    allergenFlags: inferAllergenFlags(searchable),
+    allergenFlags: foodConstraints.allergenFlags,
     contactEmail,
     contactPhone,
-    coldChainRequired: /\b(chilled|frozen|cold|fridge|refrigerated)\b/i.test(
-      searchable
-    ),
-    dietaryTags: inferDietaryTags(searchable),
+    coldChainRequired: foodConstraints.coldChainRequired,
+    dietaryTags: foodConstraints.dietaryTags,
     dueBucket: inferDueBucket(searchable),
     firstName: name.firstName,
     householdSize,
@@ -658,13 +629,17 @@ function normalizeOpenAiDraft(parsed: z.infer<typeof openAiParsedSchema>) {
   );
 
   if (parsed.draftType === "request") {
-    const payload = parsedRequestPayloadSchema.parse({
+    const rawPayload = parsedRequestPayloadSchema.parse({
       ...parsed.request,
       addressLine2: parsed.request.addressLine2 || undefined,
       contactEmail: parsed.request.contactEmail || undefined,
       contactPhone: parsed.request.contactPhone || undefined,
       message: parsed.request.message || "No details supplied yet.",
       neighborhood: parsed.request.neighborhood || undefined,
+    });
+    const payload = parsedRequestPayloadSchema.parse({
+      ...rawPayload,
+      ...normalizeFoodConstraints(rawPayload),
     });
 
     return {
@@ -721,6 +696,7 @@ async function parseWithOpenAi(source: RawIntakeSource) {
             "You parse food-delivery public intake for Mealflo. Return JSON only. " +
             "Classify as request, volunteer, or other. Make a best guess but list fields that need human review. " +
             "For request.message and volunteer.message, include only useful operational notes for review: access instructions, buzzer/intercom/door details, parking, timing constraints, mobility needs, allergies or diet caveats, cold-chain constraints, route preferences, or safety notes. " +
+            "For request.dietaryTags, use only dietary categories like low_sodium, vegetarian, vegan, gluten_free, soft_food, diabetic_friendly, dairy_free, halal, renal_friendly, heart_healthy, or high_protein. Put avoidances and allergies like peanuts, tree nuts, shellfish, egg, fish, wheat, dairy, or gluten in request.allergenFlags instead. " +
             "Do not include greetings, thanks, signatures, organization names, filler, or facts already captured in structured fields such as name, address, phone, email, household size, meal count, availability, vehicle access, stairs, or start area. " +
             "If there are no extra operational notes, use exactly 'No extra access notes provided.' for requests or 'No extra route notes provided.' for volunteers.",
           role: "system",

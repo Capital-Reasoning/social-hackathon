@@ -667,10 +667,7 @@ export function AdminInventoryWorkflows({
             />
           </Field>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p role="status" className="text-muted text-sm leading-6">
-              {parseStatus}
-            </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="secondary"

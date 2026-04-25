@@ -10,6 +10,7 @@ import {
   createVolunteerIntake,
   evaluateRoutePrerequisites,
   generateRoutes,
+  getAdminDashboardData,
   getAdminInventoryData,
   getAdminInboxData,
   getAdminRoutesData,
@@ -180,14 +181,19 @@ describe.sequential("backend foundations", () => {
       throw new Error("Expected staged Gmail message to create a draft.");
     }
 
-    await ignoreDraft(created.draftId);
+    const createdDraftId = created.draftId;
+    if (!createdDraftId) {
+      throw new Error("Expected staged Gmail result to include a draft id.");
+    }
+
+    await ignoreDraft(createdDraftId);
 
     const sameSync = await createGmailIntake(gmailMessage);
     const inboxAfterIgnore = await getAdminInboxData();
 
     expect(sameSync.action).toBe("ignored");
     expect(
-      inboxAfterIgnore.inboxItems.some((item) => item.id === created.draftId)
+      inboxAfterIgnore.inboxItems.some((item) => item.id === createdDraftId)
     ).toBe(false);
 
     await seedDemoData();
@@ -197,7 +203,9 @@ describe.sequential("backend foundations", () => {
 
     expect(afterReseed.action).toBe("ignored");
     expect(
-      inboxAfterReseed.inboxItems.some((item) => item.sender === "Ignored Sender")
+      inboxAfterReseed.inboxItems.some(
+        (item) => item.sender === "Ignored Sender"
+      )
     ).toBe(false);
   });
 
@@ -575,6 +583,50 @@ describe.sequential("backend foundations", () => {
 
     expect(route.deliveredCount).toBe(0);
     expect(route.remainingCount).toBe(route.stopCount);
+  });
+
+  it("shows one live driver marker per route when duplicate phones join", async () => {
+    await resetRouteSession({ routeId: "route-victoria-core" });
+
+    const first = await startDriverSession({
+      currentLat: 48.431,
+      currentLng: -123.365,
+      deviceFingerprint: "map-anchor-phone",
+      routeId: "route-victoria-core",
+      volunteerId: "volunteer-rosa-martinez",
+    });
+    const second = await startDriverSession({
+      currentLat: 48.49,
+      currentLng: -123.41,
+      deviceFingerprint: "map-shadow-phone",
+      routeId: "route-victoria-core",
+      volunteerId: "volunteer-rosa-martinez",
+    });
+
+    await heartbeatDriverSession({
+      currentLat: 48.432,
+      currentLng: -123.366,
+      currentStopIndex: 0,
+      deliveredCountLocal: 0,
+      sessionId: first.id,
+    });
+    await heartbeatDriverSession({
+      currentLat: 48.491,
+      currentLng: -123.411,
+      currentStopIndex: 2,
+      deliveredCountLocal: 2,
+      sessionId: second.id,
+    });
+
+    const dashboard = await getAdminDashboardData();
+    const routeDriverMarkers = dashboard.liveMarkers.filter(
+      (marker) => marker.id === "driver-route-victoria-core"
+    );
+
+    expect(routeDriverMarkers).toHaveLength(1);
+    expect(routeDriverMarkers[0]?.icon).toBe("delivery-van");
+    expect(routeDriverMarkers[0]?.latitude).toBeCloseTo(48.432, 3);
+    expect(routeDriverMarkers[0]?.longitude).toBeCloseTo(-123.366, 3);
   });
 
   it("elects a new anchor after the previous anchor is lost", async () => {

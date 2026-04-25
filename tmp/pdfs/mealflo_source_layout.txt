@@ -1,0 +1,148 @@
+                                                                                                                                                                                              ADMIN VIEW
+
+
+        mealflo                      Dashboard              Inbox            Routes            Inventory                                  + Add request              + Add volunteer              Reset demo
+
+
+
+
+     TRACK 2 / FOOD SECURITY DELIVERY OPERATIONS
+                                                                                                                                                4 items                            23 requests
+                                                                                                                                                Waiting for review                 Ready today
+
+     Mealflo Hackathon Writeup
+                                                                                                                                                5 routes                           100 meals
+     A working coordination app for turning intake, inventory, volunteer availability, and                                                      Ready to assign                    Ready for delivery
+     delivery constraints into safer food support routes.
+
+
+
+         PROBLEM                                                                                                 WORKING WEB APP
+
+         Track chosen and problem tackled                                                                        What we built
+  We chose Track 2: Food Security Delivery Operations. We tackled the coordination                         We built Mealflo, a web application for food support delivery operations. It connects public
+  problem faced by volunteer-led food delivery programs, where incoming food requests,                     intake, admin coordination, and a volunteer driver experience, backed by a database layer,
+  volunteer availability, meal inventory, routes, client needs, allergies, cold-chain                      route calculation, map-based coordination, and language-model-assisted processing for
+  requirements, accessibility constraints, and delivery status all have to be managed at the               intake and inventory workflows.
+  same time.
+
+  Our focus was helping a frontline coordinator turn scattered intake, inventory, and
+  volunteer information into safe, assigned delivery routes with less manual work and fewer
+  missed details - supported by a guided delivery system for volunteer drivers.
+
+
+
+
+            Public intake                                                          Admin operations dashboard                                              Volunteer driver view
+
+  Clients request food support and volunteers sign up to                 Coordinators review incoming requests, manage client                    Drivers use a phone-friendly interface to see assigned
+  deliver meals. The system captures address, meal                       records, view inventory, create routes, assign drivers,                 routes, follow directions one stop at a time, view
+  count, timing, dietary needs, allergies, availability,                 and track progress from one operational picture of what                 delivery notes, notify clients, and mark deliveries
+  vehicle access, cooler capacity, and mobility                          needs to happen today.                                                  complete.
+  constraints.
+
+
+
+
+Mealflo Hackathon Writeup                                                                                                                                                                                  1
+                                                                                                                                                                                                  ADMIN VIEW
+
+
+        mealflo                      Dashboard                Inbox          Routes              Inventory                                  + Add request               + Add volunteer                Reset demo
+
+
+
+
+OPERATOR WORKFLOW
+
+
+How a frontline operator would use it on a real Monday morning
+The workflow is intentionally low-cognitive-load: review requests, check constraints, assign routes, load meals, guide
+drivers, and track completion.                                                                                       LIVE MAP
+
+
+  1     Review recent requests                                               2     Check available inventory                                             Delivery coordination snapshot
+
+  Instead of searching through emails, forms,                                They see which meals or staples are ready for delivery.
+  spreadsheets, and messages, the coordinator sees intake                    Entries can be made manually or through uploading a
+  in one place with address, quantity, urgency, dietary                      receipt, with meals tagged by allergens or dietary
+  needs, allergies, mobility needs, and delivery notes.                      restrictions.
+
+                                                                                                                                                            0 active              updates as stops complete
+
+
+  3     Review volunteer availability                                        4     Review generated routes
+
+  Mealflo captures driver constraints such as available time,                Deliveries are grouped into routes that consider urgency,
+  starting location, vehicle access, cooler capacity, stair                  driver capacity, and food requirements. The coordinator
+  comfort, and other limitations.                                            assigns a driver and confirms meals to load.
+                                                                                                                                                         READY TODAY
+
+                                                                                                                                                         Coordinator view
+                                                                                                                                                         Client                        Urgency         Meals
+
+  5     Guide the driver                                                     6     Track completion                                                      Mabel Hart                       9             2
+
+                                                                                                                                                         Keisha Noor                      9             2
+  The driver mobile view shows the next stop, address,                       As stops are completed, the dashboard updates so the
+  meals to deliver, delivery notes, and a simple completion                  operator can see what is out for delivery, complete, and                    Noel Okafor                      9              3
+  button.                                                                    needing follow-up without calling every driver.                                                                           View all
+                                                                                                                                                         Priya Sandhu                     9              3
+
+
+
+
+                                                A lower-cognitive-load operating rhythm for frontline food support: every request, constraint, route, driver update, and follow-up action is visible
+             Intended result
+                                                in one place.
+
+
+
+
+Mealflo Hackathon Writeup                                                                                                                                                                                         2
+                                                                                                                                                                   ADMIN VIEW
+
+
+        mealflo                 Dashboard            Inbox      Routes           Inventory                          + Add request            + Add volunteer          Reset demo
+
+
+
+
+     NEXT RELEASE
+
+
+     What we would ship next with one more week
+     With one more week, we would focus on expanding communication channels and improving real-world delivery
+     coordination.
+
+
+
+
+      01                                                        02                                                           03
+
+
+
+  Connect additional intake sources                          Add real text messaging                                     Get field data from a real
+                                                                                                                         organization
+  Many food support requests do not arrive through           Drivers need simple communication tools during              Finally, we would get field data from a real
+  a formal web form. They may come through                   delivery. We would add real text messaging from             organization. That would let us test Mealflo
+  Instagram, Facebook, text message, or direct               the driver flow, so a driver could send a genuine           against real intake patterns, delivery constraints,
+  messages to the organization. We would add                 SMS through the app using a pre-written message             volunteer workflows, and communication needs,
+  these as intake channels so Mealflo can capture            such as: "Hi, this is your meal delivery driver. I'm        so the next version is shaped by frontline
+  requests from the places people already use.               outside now."                                               operations rather than guided and educated
+                                                                                                                         assumptions.
+
+
+
+
+     MEALFLO IN ONE LINE
+
+     A practical coordination layer for food support delivery teams: intake becomes                                               Requests          Routes           Delivery
+
+     structured, constraints become visible, routes become assignable, and drivers get
+     guided execution on the phone.
+
+
+
+Mealflo Hackathon Writeup                                                                                                                                                       3
+

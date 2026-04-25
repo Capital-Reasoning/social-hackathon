@@ -3,11 +3,11 @@ import { AdminDeliveriesToggle } from "@/components/mealflo/admin-deliveries-tog
 import { AdminDirectoryTable } from "@/components/mealflo/admin-directory-table";
 import { AdminInboxWorkbench } from "@/components/mealflo/admin-inbox-workbench";
 import { AdminInventoryWorkflows } from "@/components/mealflo/admin-inventory-workflows";
+import { AdminLiveMap } from "@/components/mealflo/admin-live-map";
 import { TodayRouteList } from "@/components/mealflo/admin-today-routes";
 import { ButtonLink } from "@/components/mealflo/button";
 import { Card } from "@/components/mealflo/card";
 import { PageFrame, PageHeader, TopBar } from "@/components/mealflo/layout";
-import { MapCanvas } from "@/components/mealflo/map-canvas";
 import {
   Table,
   TableBody,
@@ -22,7 +22,6 @@ import {
   getAdminInventoryData,
   getAdminRoutesData,
   ensureSeededData,
-  type LiveMarker,
   type TriageBucket,
   type TriageRequestCard,
 } from "@/server/mealflo/backend";
@@ -94,34 +93,6 @@ function urgencyTone(value: number) {
   }
 
   return "border-[rgba(24,24,60,0.12)] bg-[rgba(255,255,255,0.76)] text-muted";
-}
-
-function requestMarkerTone(request: TriageRequestCard): LiveMarker["tone"] {
-  if (request.status === "delivered") {
-    return "success";
-  }
-
-  if (request.status === "held" || urgencyValue(request.urgency) >= 8) {
-    return "warning";
-  }
-
-  return "info";
-}
-
-function todayDeliveryMarkers(
-  requests: readonly TriageRequestCard[],
-  driverMarkers: readonly LiveMarker[]
-): LiveMarker[] {
-  const requestMarkers = requests.map((request) => ({
-    description: request.address,
-    id: `today-${request.id}`,
-    label: request.clientName,
-    latitude: request.latitude,
-    longitude: request.longitude,
-    tone: requestMarkerTone(request),
-  }));
-
-  return [...requestMarkers, ...driverMarkers];
 }
 
 function formatAdminMinutes(value: number) {
@@ -247,65 +218,6 @@ function DashboardSectionHeader({
   );
 }
 
-function MapActivityIndicator({ count }: { count: number }) {
-  return (
-    <div className="text-info-text inline-flex items-baseline gap-2 text-[17px] leading-none font-semibold">
-      <MealfloIcon name="route-road" size={25} className="translate-y-[5px]" />
-      <span>{count} active</span>
-    </div>
-  );
-}
-
-function LiveMapHeader({ activeDriverCount }: { activeDriverCount: number }) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-baseline">
-      <h2 className="font-display text-ink text-[28px] font-semibold tracking-[-0.02em]">
-        Live map
-      </h2>
-      <div className="min-w-0 sm:justify-self-center">
-        <MapLegend />
-      </div>
-      <div className="sm:justify-self-end">
-        <MapActivityIndicator count={activeDriverCount} />
-      </div>
-    </div>
-  );
-}
-
-const mapLegendItems = [
-  {
-    className: "border-[rgba(32,56,192,0.34)] bg-[var(--mf-color-blue-300)]",
-    label: "Ready stop",
-  },
-  {
-    className: "border-[rgba(196,125,0,0.36)] bg-[var(--mf-color-amber-300)]",
-    label: "High urgency",
-  },
-  {
-    className: "border-[rgba(46,138,80,0.36)] bg-[var(--mf-color-green-300)]",
-    label: "Delivered",
-  },
-] as const;
-
-function MapLegend() {
-  return (
-    <ul
-      aria-label="Map marker legend"
-      className="text-muted flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium"
-    >
-      {mapLegendItems.map((item) => (
-        <li key={item.label} className="inline-flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className={`block h-3.5 w-3.5 rounded-full border-[2px] shadow-[0_0_0_2px_rgba(255,255,255,0.92)] ${item.className}`}
-          />
-          <span>{item.label}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function dashboardKpiCopy(item: { id: string; label: string; value: string }) {
   switch (item.id) {
     case "new-intake":
@@ -332,7 +244,7 @@ function SummaryStatusStrip({
   }>;
 }) {
   return (
-    <section className="border-line rounded-[16px] border-[1.5px] bg-white px-4 py-3 sm:px-5">
+    <section className="border-line rounded-[16px] border-[1.5px] bg-white px-4 py-10 sm:px-5">
       <div
         className={`grid divide-y divide-[rgba(24,24,60,0.08)] sm:grid-cols-2 sm:divide-y-0 xl:divide-x ${
           items.length === 3 ? "xl:grid-cols-3" : "xl:grid-cols-4"
@@ -573,14 +485,6 @@ export async function AdminDashboardView() {
   await ensureSeededData();
 
   const data = await getAdminDashboardData();
-  const activeDriverMarkers = data.liveMarkers.filter((marker) =>
-    marker.id.startsWith("driver-")
-  );
-  const activeDriverCount = activeDriverMarkers.length;
-  const mapMarkers = todayDeliveryMarkers(
-    data.requestBuckets.today,
-    activeDriverMarkers
-  );
 
   return (
     <div className="space-y-6">
@@ -589,15 +493,10 @@ export async function AdminDashboardView() {
       <DashboardSummaryCard items={data.dashboardKpis} />
 
       <div className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(420px,0.82fr)]">
-        <section className="space-y-3">
-          <LiveMapHeader activeDriverCount={activeDriverCount} />
-          <MapCanvas
-            className="h-[640px]"
-            initialView="greater-victoria"
-            markerStyle="dot"
-            markers={mapMarkers}
-          />
-        </section>
+        <AdminLiveMap
+          initialLiveMarkers={data.liveMarkers}
+          requests={data.requestBuckets.today}
+        />
 
         <section className="flex min-w-0 flex-col space-y-3">
           <DashboardSectionHeader title="Ready today" />

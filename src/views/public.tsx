@@ -33,8 +33,8 @@ function ActionPanel({
       className="mf-enter mf-sheen border-line hover:border-line-strong flex min-h-[380px] flex-col gap-8 rounded-[18px] border-[1.5px] bg-white p-6 transition-[transform,border-color,background-color] duration-[var(--mf-duration-slow)] ease-[var(--mf-ease-spring)] hover:-translate-y-1 md:p-8"
     >
       <IconSwatch name={icon} size={118} swatchSize={132} tone="warm" />
-      <div className="space-y-2">
-        <h2 className="font-display text-ink text-[clamp(2.3rem,4vw,3.8rem)] leading-[0.96] font-semibold tracking-[-0.03em]">
+      <div className="space-y-4">
+        <h2 className="font-display text-ink text-[2rem] leading-[1.06] font-semibold whitespace-nowrap tracking-normal md:text-[2.35rem] 2xl:text-[2.55rem]">
           {title}
         </h2>
         <p className="text-muted max-w-[28rem] text-lg leading-8">{note}</p>

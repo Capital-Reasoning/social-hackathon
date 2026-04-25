@@ -2,7 +2,9 @@ type RouteDirectionStep = {
   distanceMeters: number;
 };
 
-const instructionLookaheadMeters = 70;
+const turnInstructionLookaheadMeters = 500;
+const initialInstructionHoldMeters = 30;
+const continueStraightInstruction = "Continue straight";
 
 export function getDirectionProgress(
   segmentDirections: readonly RouteDirectionStep[],
@@ -25,18 +27,33 @@ export function getDirectionProgress(
     const isFinalStep = index === segmentDirections.length - 1;
 
     if (distanceAlongLine <= nextWalked || isFinalStep) {
-      if (
-        !isFinalStep &&
-        nextWalked - distanceAlongLine <= instructionLookaheadMeters
-      ) {
+      const distanceToNextStep = Math.max(nextWalked - distanceAlongLine, 0);
+      const hasClearedInitialInstruction =
+        index === 0 && distanceAlongLine >= initialInstructionHoldMeters;
+      const isPastLaterManeuver = index > 0 && distanceAlongLine > walked;
+      const shouldShowNextManeuver =
+        !isFinalStep && distanceToNextStep <= turnInstructionLookaheadMeters;
+
+      if (shouldShowNextManeuver) {
         return {
-          remainingMeters: Math.max(nextWalked - distanceAlongLine, 0),
+          remainingMeters: distanceToNextStep,
           stepIndex: nextStepIndex,
         };
       }
 
+      if (
+        !isFinalStep &&
+        (hasClearedInitialInstruction || isPastLaterManeuver)
+      ) {
+        return {
+          instruction: continueStraightInstruction,
+          remainingMeters: distanceToNextStep,
+          stepIndex: index,
+        };
+      }
+
       return {
-        remainingMeters: Math.max(nextWalked - distanceAlongLine, 0),
+        remainingMeters: distanceToNextStep,
         stepIndex: index,
       };
     }

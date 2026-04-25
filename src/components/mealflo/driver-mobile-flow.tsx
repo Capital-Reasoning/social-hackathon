@@ -56,6 +56,7 @@ type DirectionGlyphKind = "arrive" | "left" | "pickup" | "right" | "straight";
 
 const progressKey = (routeId: string) => `mealflo-driver-progress:${routeId}`;
 const fingerprintKey = "mealflo-device-fingerprint";
+const DRIVER_SESSION_HEARTBEAT_INTERVAL_MS = 3_000;
 const driveAnimationTuning = {
   bearingLookaheadMeters: 44,
   bearingMaxDegreesPerSecond: 145,
@@ -1074,6 +1075,9 @@ function DriverMobileFlowReady({
   const [directionDistanceMeters, setDirectionDistanceMeters] = useState<
     number | null
   >(null);
+  const [directionInstruction, setDirectionInstruction] = useState<
+    string | null
+  >(null);
   const [directionSegmentIndex, setDirectionSegmentIndex] = useState(0);
   const [directionStepIndex, setDirectionStepIndex] = useState(0);
   const [currentPosition, setCurrentPosition] = useState(() =>
@@ -1146,6 +1150,7 @@ function DriverMobileFlowReady({
               directionDistanceMeters !== null
                 ? formatMapDistanceMeters(directionDistanceMeters)
                 : currentDirection.distance,
+            instruction: directionInstruction ?? currentDirection.instruction,
           }
         : null;
   const bottomSheetTitle =
@@ -1177,6 +1182,7 @@ function DriverMobileFlowReady({
       drivingBearingRef.current = undefined;
       setDrivingBearing(undefined);
       setDirectionDistanceMeters(null);
+      setDirectionInstruction(null);
       setDirectionSegmentIndex(stored.currentStopIndex);
       setDirectionStepIndex(0);
       setCurrentPosition(start);
@@ -1483,7 +1489,10 @@ function DriverMobileFlowReady({
     };
 
     tick();
-    const interval = window.setInterval(tick, 15_000);
+    const interval = window.setInterval(
+      tick,
+      DRIVER_SESSION_HEARTBEAT_INTERVAL_MS
+    );
 
     return () => {
       window.clearInterval(interval);
@@ -1517,6 +1526,7 @@ function DriverMobileFlowReady({
     drivingBearingRef.current = undefined;
     setDrivingBearing(undefined);
     setDirectionDistanceMeters(null);
+    setDirectionInstruction(null);
     setDirectionSegmentIndex(0);
     setDirectionStepIndex(0);
     setCurrentPosition(start);
@@ -1602,6 +1612,7 @@ function DriverMobileFlowReady({
           setDrivingBearing(nextBearing);
           setCurrentPosition(nextLocation);
           setDirectionStepIndex(directionProgress.stepIndex);
+          setDirectionInstruction(directionProgress.instruction ?? null);
           setDirectionDistanceMeters(directionProgress.remainingMeters);
 
           if (progress < 1) {
@@ -1669,6 +1680,7 @@ function DriverMobileFlowReady({
     setActiveRoutePath(animationLine);
     setDirectionSegmentIndex(0);
     setDirectionStepIndex(0);
+    setDirectionInstruction(null);
     setDirectionDistanceMeters(segmentDirections[0]?.distanceMeters ?? null);
     await animateCurrentPosition({
       duration: getDriveAnimationDurationMs(animationLine),
@@ -1756,6 +1768,7 @@ function DriverMobileFlowReady({
         setActiveRoutePath(animationLine);
         setDirectionSegmentIndex(movementSegmentIndex);
         setDirectionStepIndex(0);
+        setDirectionInstruction(null);
         setDirectionDistanceMeters(
           segmentDirections[0]?.distanceMeters ?? null
         );
@@ -1767,10 +1780,12 @@ function DriverMobileFlowReady({
         setActiveRoutePath(undefined);
         setCameraPosition(null);
         setDirectionStepIndex(Math.max(segmentDirections.length - 1, 0));
+        setDirectionInstruction(null);
         setDirectionDistanceMeters(0);
       } else {
         setActiveRoutePath(undefined);
         setCameraPosition(null);
+        setDirectionInstruction(null);
         setDirectionDistanceMeters(null);
       }
 

@@ -314,12 +314,13 @@ export function AdminInboxWorkbench({ initialData }: AdminInboxWorkbenchProps) {
             type="button"
             size="sm"
             variant="secondary"
-            leading={<MealfloIcon name="repeat-arrows" size={16} />}
+            iconOnly
+            aria-label={isSyncingGmail ? "Checking Gmail" : "Check Gmail"}
             disabled={isSyncingGmail}
-            className="min-h-[38px] px-3 text-xs"
+            className="mt-1 size-11 p-0"
             onClick={() => void syncGmail()}
           >
-            {isSyncingGmail ? "Checking" : "Check Gmail"}
+            <MealfloIcon name="repeat-arrows" size={24} />
           </Button>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">

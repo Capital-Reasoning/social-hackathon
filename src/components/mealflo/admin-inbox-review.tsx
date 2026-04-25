@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/mealflo/button";
 import { Field, Input, Select, Textarea } from "@/components/mealflo/field";
 import { InsetCard } from "@/components/mealflo/card";
+import { parseFoodConstraintsReviewText } from "@/lib/mealflo-food-constraints";
 
 import type { AdminInboxData } from "@/server/mealflo/backend";
 
@@ -30,13 +31,6 @@ function asNumber(value: unknown, fallback: number) {
 
 function asBoolean(value: unknown, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
-}
-
-function toTags(value: string) {
-  return value
-    .split(/[,;\n]/)
-    .map((entry) => entry.trim().toLowerCase().replace(/\s+/g, "_"))
-    .filter(Boolean);
 }
 
 function splitName(value: string) {
@@ -110,20 +104,30 @@ export function AdminInboxReview({
   );
 
   function requestPayload() {
-    const [addressLine1, city] = address.split(",").map((part) => part.trim());
+    const addressParts = address
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const city =
+      addressParts.length > 1
+        ? addressParts[addressParts.length - 1]
+        : undefined;
+    const addressLine1 =
+      addressParts.length > 1
+        ? addressParts.slice(0, -1).join(", ")
+        : (addressParts[0] ?? "");
     const parsedName = splitName(name);
+    const foodConstraints = parseFoodConstraintsReviewText(dietaryFlags);
 
     return {
       ...payload,
       addressLine1:
         addressLine1 || asText(payload.addressLine1, "Address pending"),
-      allergenFlags: Array.isArray(payload.allergenFlags)
-        ? payload.allergenFlags
-        : [],
+      allergenFlags: foodConstraints.allergenFlags,
       coldChainRequired: asBoolean(payload.coldChainRequired),
       contactEmail: email.trim() || undefined,
       contactPhone: phone.trim() || undefined,
-      dietaryTags: toTags(dietaryFlags),
+      dietaryTags: foodConstraints.dietaryTags,
       dueBucket: needBy,
       firstName: parsedName.firstName,
       householdSize: Number.parseInt(householdSize, 10) || 1,
@@ -315,7 +319,7 @@ export function AdminInboxReview({
               onChange={(event) => setHouseholdSize(event.target.value)}
             />
           </Field>
-          <Field label="Dietary flags" htmlFor="dietary-flags">
+          <Field label="Food needs" htmlFor="dietary-flags">
             <Input
               id="dietary-flags"
               value={dietaryFlags}

@@ -5,6 +5,10 @@ import { z } from "zod";
 
 import { serverEnv } from "@/lib/config/server-env";
 import {
+  formatFoodConstraintsForReview,
+  normalizeFoodConstraints,
+} from "@/lib/mealflo-food-constraints";
+import {
   fixtureReceiptText,
   ingredientSourceTypes,
   mealCategories,
@@ -54,6 +58,12 @@ const ANCHOR_STALE_AFTER_MS = 90_000;
 const PUBLIC_FORM_PARSING_VERSION = "public-form-parsing-v1";
 
 type Tone = "primary" | "success" | "warning" | "info";
+type LiveMarkerIcon =
+  | "delivery-van"
+  | "grocery-bag"
+  | "location-pin"
+  | "meal-container";
+type NewIntakeMessage = typeof intakeMessages.$inferInsert;
 
 export type DashboardKpi = {
   icon: string;
@@ -80,6 +90,8 @@ export type RouteSummaryCard = {
 };
 
 export type LiveMarker = {
+  description?: string;
+  icon?: LiveMarkerIcon;
   id: string;
   label: string;
   latitude: number;
@@ -655,6 +667,47 @@ function sentenceCaseList(values: string[]) {
     .join(", ");
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripMunicipalityFromAddressLine(
+  addressLine: string,
+  municipality: string
+) {
+  const cleanAddress = addressLine.trim();
+  const cleanMunicipality = municipality.trim();
+
+  if (!cleanAddress || !cleanMunicipality) {
+    return cleanAddress;
+  }
+
+  return (
+    cleanAddress
+      .replace(
+        new RegExp(`\\s*,?\\s*${escapeRegExp(cleanMunicipality)}\\s*$`, "i"),
+        ""
+      )
+      .trim() || cleanAddress
+  );
+}
+
+function formatAddressWithMunicipality(
+  addressLine: string,
+  municipality: string,
+  addressLine2?: string | null
+) {
+  const cleanAddress = stripMunicipalityFromAddressLine(
+    addressLine,
+    municipality
+  );
+  const parts = [cleanAddress, addressLine2, municipality]
+    .map((part) => part?.trim())
+    .filter(Boolean);
+
+  return parts.join(", ");
+}
+
 function compactName(firstName: string, lastName: string) {
   return `${firstName} ${lastName}`.trim();
 }
@@ -662,7 +715,11 @@ function compactName(firstName: string, lastName: string) {
 function buildRequestRawBody(input: z.infer<typeof requestIntakeSchema>) {
   return [
     `Name: ${compactName(input.firstName, input.lastName)}`,
-    `Address: ${input.addressLine1}${input.addressLine2 ? `, ${input.addressLine2}` : ""}, ${input.municipality}`,
+    `Address: ${formatAddressWithMunicipality(
+      input.addressLine1,
+      input.municipality,
+      input.addressLine2
+    )}`,
     `Contact: ${input.contactPhone ?? input.contactEmail ?? "Not supplied"}`,
     `Household size: ${input.householdSize}`,
     `Meal count: ${input.requestedMealCount}`,
@@ -900,14 +957,22 @@ function focusedRequestNotes(
 ) {
   const candidate = textField(fallback) ?? payload.message;
   const sentences = splitOperationalNoteSentences(candidate);
+  const accessPattern =
+    /\b(text|call|phone|before|arrival|buzzer|intercom|door|stairs|knock|lobby|parking|leave|walker|wheelchair|side entrance|gate|elevator|porch|ramp|suite|unit|loading zone)\b/i;
+  const foodNeedPattern =
+    /\b(peanuts?|tree nuts?|nut allergy|allerg(?:y|ic|en)|low[-\s]?sodium|low[-\s]?salt|lower[-\s]?salt|vegetarian|vegan|halal|gluten|celiac|dairy|lactose|diabetic|diabetes|soft|pureed|minced|renal|shellfish|egg|fish|wheat|chilled|frozen|cold|refrigerated|fridge|cooler)\b/i;
   const focused = sentences.filter((sentence) => {
     if (/^(area|neighbou?rhood)\s*:/i.test(sentence)) {
       return false;
     }
 
+    if (foodNeedPattern.test(sentence) && !accessPattern.test(sentence)) {
+      return false;
+    }
+
     if (
       new RegExp(
-        `\\b(${payload.firstName}|${payload.lastName}|${payload.addressLine1.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}|${payload.municipality})\\b`,
+        `\\b(${escapeRegExp(payload.firstName)}|${escapeRegExp(payload.lastName)}|${escapeRegExp(payload.addressLine1)}|${escapeRegExp(payload.municipality)})\\b`,
         "i"
       ).test(sentence)
     ) {
@@ -918,9 +983,7 @@ function focusedRequestNotes(
       /\b(meals?|grocer(?:y|ies)|hamper|household|people|family|home|need|would help|delivery request)\b/i.test(
         sentence
       ) &&
-      !/\b(text|call|phone|before|arrival|buzzer|intercom|door|stairs|knock|lobby|parking|leave|walker|wheelchair|side entrance)\b/i.test(
-        sentence
-      )
+      !accessPattern.test(sentence)
     ) {
       return false;
     }
@@ -1170,9 +1233,45 @@ function buildLiveMarkers(
   depotRows: Array<typeof depots.$inferSelect>
 ) {
   const now = new Date();
-  const activeRoutes = routeRows.filter(
-    (route) => route.status === "in_progress" || route.status === "approved"
-  );
+  const activeSessionsByRoute = new Map<
+    string,
+    Array<typeof driverSessions.$inferSelect>
+  >();
+
+  for (const session of sessionRows) {
+    if (session.status !== "active" || isSessionLost(session, now)) {
+      continue;
+    }
+
+    const routeSessions = activeSessionsByRoute.get(session.routeId) ?? [];
+    routeSessions.push(session);
+    activeSessionsByRoute.set(session.routeId, routeSessions);
+  }
+
+  for (const routeSessions of activeSessionsByRoute.values()) {
+    routeSessions.sort(
+      (left, right) =>
+        left.startedAt.getTime() - right.startedAt.getTime() ||
+        left.id.localeCompare(right.id)
+    );
+  }
+
+  const activeRoutes = routeRows
+    .filter(
+      (route) => route.status === "in_progress" || route.status === "approved"
+    )
+    .sort((left, right) => {
+      const leftHasDriver = activeSessionsByRoute.has(left.id) ? 0 : 1;
+      const rightHasDriver = activeSessionsByRoute.has(right.id) ? 0 : 1;
+      const leftStatusRank = left.status === "in_progress" ? 0 : 1;
+      const rightStatusRank = right.status === "in_progress" ? 0 : 1;
+
+      return (
+        leftHasDriver - rightHasDriver ||
+        leftStatusRank - rightStatusRank ||
+        left.routeName.localeCompare(right.routeName)
+      );
+    });
 
   const markers: LiveMarker[] = [];
 
@@ -1181,12 +1280,13 @@ function buildLiveMarkers(
     const volunteer = volunteerRows.find(
       (entry) => entry.id === route.volunteerId
     );
-    const anchorSession = sessionRows.find(
-      (entry) =>
-        entry.id === route.dashboardAnchorSessionId &&
-        entry.status === "active" &&
-        !isSessionLost(entry, now)
-    );
+    const routeSessions = activeSessionsByRoute.get(route.id) ?? [];
+    const anchorSession =
+      routeSessions.find(
+        (entry) => entry.id === route.dashboardAnchorSessionId
+      ) ??
+      routeSessions.find((entry) => entry.isAnchor) ??
+      routeSessions[0];
     const nextStop = stopRows
       .filter(
         (entry) => entry.routeId === route.id && entry.status !== "delivered"
@@ -1203,8 +1303,16 @@ function buildLiveMarkers(
       });
     }
 
-    if (anchorSession?.currentLat && anchorSession.currentLng && volunteer) {
+    if (
+      anchorSession?.currentLat !== null &&
+      anchorSession?.currentLat !== undefined &&
+      anchorSession.currentLng !== null &&
+      anchorSession.currentLng !== undefined &&
+      volunteer
+    ) {
       markers.push({
+        description: route.routeName,
+        icon: "delivery-van",
         id: `driver-${route.id}`,
         label: volunteer.firstName,
         latitude: anchorSession.currentLat,
@@ -1732,31 +1840,64 @@ export function evaluateRoutePrerequisites(input: RoutePrerequisiteInput) {
 }
 
 export async function resetDemoData() {
-  const database = getDb();
+  return serializeDemoSeedMutation(async () => {
+    const database = getDb();
 
-  await database.execute(
-    sql.raw(
-      `TRUNCATE TABLE ${truncateTableNames
-        .map((name) => `"${name}"`)
-        .join(", ")} CASCADE`
-    )
-  );
+    await truncateDemoTables(database);
 
-  return {
-    ok: true,
-    resetAt: new Date(),
-  };
+    return {
+      ok: true,
+      resetAt: new Date(),
+    };
+  });
 }
 
-async function listIgnoredGmailSourceKeys() {
-  const ignored = await getDb()
+let demoSeedMutation: Promise<unknown> | null = null;
+
+async function serializeDemoSeedMutation<T>(operation: () => Promise<T>) {
+  const previous = demoSeedMutation;
+  const current = (async () => {
+    if (previous) {
+      await previous.catch(() => undefined);
+    }
+
+    return operation();
+  })();
+  const tracked = current.finally(() => {
+    if (demoSeedMutation === tracked) {
+      demoSeedMutation = null;
+    }
+  });
+
+  demoSeedMutation = tracked;
+
+  return current;
+}
+
+async function truncateDemoTables(database: ReturnType<typeof getDb>) {
+  await database.execute(truncateDemoTablesStatement());
+}
+
+function truncateDemoTablesStatement() {
+  return sql.raw(
+    `TRUNCATE TABLE ${truncateTableNames
+      .map((name) => `"${name}"`)
+      .join(", ")} CASCADE`
+  );
+}
+
+async function listIgnoredGmailSourceKeys(database: ReturnType<typeof getDb>) {
+  const ignored = await database
     .select({
       channel: intakeMessages.channel,
       sourcePayload: intakeMessages.sourcePayload,
     })
     .from(intakeMessages)
     .where(
-      and(eq(intakeMessages.channel, "gmail"), eq(intakeMessages.status, "ignored"))
+      and(
+        eq(intakeMessages.channel, "gmail"),
+        eq(intakeMessages.status, "ignored")
+      )
     );
 
   return ignored
@@ -1764,54 +1905,49 @@ async function listIgnoredGmailSourceKeys() {
     .filter((entry): entry is string => Boolean(entry));
 }
 
-async function insertIgnoredGmailTombstones(
+function buildIgnoredGmailTombstones(
   sourceKeys: string[],
   existingSourceKeys: Set<string>
-) {
+): NewIntakeMessage[] {
   const tombstoneKeys = sourceKeys.filter(
     (sourceKey) => !existingSourceKeys.has(sourceKey)
   );
 
   if (tombstoneKeys.length === 0) {
-    return;
+    return [];
   }
 
   const now = new Date();
 
-  await getDb()
-    .insert(intakeMessages)
-    .values(
-      tombstoneKeys.map((sourceKey, index) => {
-        const gmailMessageId = gmailMessageIdFromSourceKey(sourceKey);
+  return tombstoneKeys.map((sourceKey, index) => {
+    const gmailMessageId = gmailMessageIdFromSourceKey(sourceKey);
 
-        return {
-          id: `intake-ignored-gmail-${slugify(gmailMessageId).slice(0, 24)}-${index}`,
-          channel: "gmail" as const,
-          intakeKind: "other" as const,
-          subject: "Ignored Gmail message",
-          rawBody:
-            "This Gmail message was ignored and is hidden from the demo inbox.",
-          sourcePayload: {
-            gmailMessageId,
-            ignoredAt: now.toISOString(),
-          },
-          status: "ignored" as const,
-          receivedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        };
-      })
-    );
+    return {
+      id: `intake-ignored-gmail-${slugify(gmailMessageId).slice(0, 24)}-${index}`,
+      channel: "gmail" as const,
+      intakeKind: "other" as const,
+      subject: "Ignored Gmail message",
+      rawBody:
+        "This Gmail message was ignored and is hidden from the demo inbox.",
+      sourcePayload: {
+        gmailMessageId,
+        ignoredAt: now.toISOString(),
+      },
+      status: "ignored" as const,
+      receivedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
 }
 
-export async function seedDemoData() {
+async function performSeedDemoData() {
   const dataset = buildSeedDataset();
   const database = getDb();
-  const ignoredGmailSourceKeys = new Set(await listIgnoredGmailSourceKeys());
+  const ignoredGmailSourceKeys = new Set(
+    await listIgnoredGmailSourceKeys(database)
+  );
 
-  await resetDemoData();
-
-  await database.insert(depots).values(dataset.depots);
   const intakeMessagesToInsert = dataset.intakeMessages.map((intake) => {
     const sourceKey = gmailSourceKeyForIntake(intake);
 
@@ -1842,29 +1978,34 @@ export async function seedDemoData() {
       .map((intake) => gmailSourceKeyForIntake(intake))
       .filter((entry): entry is string => Boolean(entry))
   );
-
-  await database.insert(intakeMessages).values(intakeMessagesToInsert);
-  await insertIgnoredGmailTombstones(
+  const ignoredGmailTombstones = buildIgnoredGmailTombstones(
     [...ignoredGmailSourceKeys],
     seededGmailSourceKeys
   );
-  await database.insert(intakeDrafts).values(intakeDraftsToInsert);
-  await database.insert(volunteers).values(dataset.volunteers);
-  await database
-    .insert(volunteerAvailability)
-    .values(dataset.volunteerAvailability);
-  await database.insert(vehicles).values(dataset.vehicles);
-  await database.insert(clients).values(dataset.clients);
-  await database.insert(deliverableMeals).values(dataset.deliverableMeals);
-  await database.insert(ingredientItems).values(dataset.ingredientItems);
-  await database.insert(routes).values(dataset.routes);
-  await database.insert(deliveryRequests).values(dataset.deliveryRequests);
-  await database.insert(routeStops).values(dataset.routeStops);
-  await database.insert(routeStopMealItems).values(dataset.routeStopMealItems);
+  const seedBatch = [
+    database.execute(truncateDemoTablesStatement()),
+    database.insert(depots).values(dataset.depots),
+    database.insert(intakeMessages).values(intakeMessagesToInsert),
+    ...(ignoredGmailTombstones.length > 0
+      ? [database.insert(intakeMessages).values(ignoredGmailTombstones)]
+      : []),
+    database.insert(intakeDrafts).values(intakeDraftsToInsert),
+    database.insert(volunteers).values(dataset.volunteers),
+    database.insert(volunteerAvailability).values(dataset.volunteerAvailability),
+    database.insert(vehicles).values(dataset.vehicles),
+    database.insert(clients).values(dataset.clients),
+    database.insert(deliverableMeals).values(dataset.deliverableMeals),
+    database.insert(ingredientItems).values(dataset.ingredientItems),
+    database.insert(routes).values(dataset.routes),
+    database.insert(deliveryRequests).values(dataset.deliveryRequests),
+    database.insert(routeStops).values(dataset.routeStops),
+    database.insert(routeStopMealItems).values(dataset.routeStopMealItems),
+    ...(dataset.driverSessions.length > 0
+      ? [database.insert(driverSessions).values(dataset.driverSessions)]
+      : []),
+  ] as const;
 
-  if (dataset.driverSessions.length > 0) {
-    await database.insert(driverSessions).values(dataset.driverSessions);
-  }
+  await database.batch(seedBatch);
 
   return {
     counts: {
@@ -1884,10 +2025,25 @@ export async function seedDemoData() {
   };
 }
 
+export async function seedDemoData() {
+  return serializeDemoSeedMutation(performSeedDemoData);
+}
+
 export async function createRequestIntake(
   rawInput: z.input<typeof requestIntakeSchema>
 ) {
-  const input = requestIntakeSchema.parse(rawInput);
+  const parsedInput = requestIntakeSchema.parse(rawInput);
+  const normalizedInput = requestIntakeSchema.parse({
+    ...parsedInput,
+    addressLine1: stripMunicipalityFromAddressLine(
+      parsedInput.addressLine1,
+      parsedInput.municipality
+    ),
+  });
+  const input = requestIntakeSchema.parse({
+    ...normalizedInput,
+    ...normalizeFoodConstraints(normalizedInput),
+  });
   const database = getDb();
   const slug = slugify(`${input.firstName}-${input.lastName}`);
   const now = new Date();
@@ -1907,7 +2063,11 @@ export async function createRequestIntake(
       senderPhone: input.contactPhone,
       subject: `Food request from ${compactName(input.firstName, input.lastName)}`,
       rawBody,
-      rawAddress: `${input.addressLine1}, ${input.municipality}`,
+      rawAddress: formatAddressWithMunicipality(
+        input.addressLine1,
+        input.municipality,
+        input.addressLine2
+      ),
       sourcePayload: {
         form: "public-request",
         submittedFields: input,
@@ -2004,7 +2164,11 @@ export async function createVolunteerIntake(
 
 function rawAddressFromParsedDraft(draft: ParsedIntakeDraft) {
   if (draft.draftType === "request") {
-    return `${draft.structuredPayload.addressLine1}, ${draft.structuredPayload.municipality}`;
+    return formatAddressWithMunicipality(
+      draft.structuredPayload.addressLine1,
+      draft.structuredPayload.municipality,
+      draft.structuredPayload.addressLine2
+    );
   }
 
   if (draft.draftType === "volunteer") {
@@ -2033,10 +2197,14 @@ function mergePublicFormSubmittedFields(
 
     const payload = requestIntakeSchema.parse({
       ...parsed.structuredPayload,
-      allergenFlags: submitted.data.allergenFlags,
-      coldChainRequired: submitted.data.coldChainRequired,
-      dietaryTags: submitted.data.dietaryTags,
-      message: submitted.data.message,
+      ...submitted.data,
+      addressLine1: stripMunicipalityFromAddressLine(
+        submitted.data.addressLine1,
+        submitted.data.municipality
+      ),
+      ...normalizeFoodConstraints(submitted.data),
+      neighborhood:
+        parsed.structuredPayload.neighborhood ?? submitted.data.neighborhood,
     });
 
     return {
@@ -2055,7 +2223,11 @@ function mergePublicFormSubmittedFields(
 
     const payload = volunteerIntakeSchema.parse({
       ...parsed.structuredPayload,
-      message: submitted.data.message,
+      ...submitted.data,
+      homeArea: submitted.data.homeArea || parsed.structuredPayload.homeArea,
+      homeMunicipality:
+        submitted.data.homeMunicipality ||
+        parsed.structuredPayload.homeMunicipality,
     });
 
     return {
@@ -2257,7 +2429,11 @@ export async function createGmailIntake(
       rawBody: input.rawBody,
       rawAddress:
         draft.draftType === "request"
-          ? `${draft.structuredPayload.addressLine1}, ${draft.structuredPayload.municipality}`
+          ? formatAddressWithMunicipality(
+              draft.structuredPayload.addressLine1,
+              draft.structuredPayload.municipality,
+              draft.structuredPayload.addressLine2
+            )
           : undefined,
       sourcePayload: {
         deliveredTo: input.deliveredTo,
@@ -2291,7 +2467,21 @@ export async function updateDraft(
   draftId: string,
   rawInput: z.input<typeof draftUpdateSchema>
 ) {
-  const input = draftUpdateSchema.parse(rawInput);
+  const parsedInput = draftUpdateSchema.parse(rawInput);
+  const input =
+    parsedInput.draftType === "request"
+      ? ({
+          ...parsedInput,
+          structuredPayload: requestIntakeSchema.parse({
+            ...parsedInput.structuredPayload,
+            addressLine1: stripMunicipalityFromAddressLine(
+              parsedInput.structuredPayload.addressLine1,
+              parsedInput.structuredPayload.municipality
+            ),
+            ...normalizeFoodConstraints(parsedInput.structuredPayload),
+          }),
+        } satisfies z.infer<typeof draftUpdateSchema>)
+      : parsedInput;
   const database = getDb();
   const now = new Date();
   const lowConfidenceFields =
@@ -2407,7 +2597,15 @@ export async function approveDraft(draftId: string) {
   const now = new Date();
 
   if (draft.draftType === "request") {
-    const payload = requestIntakeSchema.parse(draft.structuredPayload);
+    const parsedPayload = requestIntakeSchema.parse(draft.structuredPayload);
+    const payload = requestIntakeSchema.parse({
+      ...parsedPayload,
+      addressLine1: stripMunicipalityFromAddressLine(
+        parsedPayload.addressLine1,
+        parsedPayload.municipality
+      ),
+      ...normalizeFoodConstraints(parsedPayload),
+    });
     const reviewNotes = focusedRequestNotes(
       payload,
       structuredTextField(draft.structuredPayload, "accessNotes")
@@ -3601,11 +3799,12 @@ export async function getAdminInboxData(
           request?.approvedMealCount ??
           request?.requestedMealCount ??
           client.householdSize;
+        const foodNotes = formatFoodConstraintsForReview({
+          allergenFlags: client.allergenFlags,
+          dietaryTags: client.dietaryTags,
+        });
         const notes = [
-          ...client.dietaryTags.map((tag) => sentenceCaseList([tag])),
-          ...client.allergenFlags.map(
-            (flag) => `${sentenceCaseList([flag])} allergy`
-          ),
+          foodNotes === "None" ? null : foodNotes,
           client.accessNotes,
         ].filter(Boolean);
 
@@ -3682,7 +3881,11 @@ export async function getAdminInboxData(
           : null;
       const address =
         queueRequestPayload?.success === true
-          ? `${queueRequestPayload.data.addressLine1}, ${queueRequestPayload.data.municipality}`
+          ? formatAddressWithMunicipality(
+              queueRequestPayload.data.addressLine1,
+              queueRequestPayload.data.municipality,
+              queueRequestPayload.data.addressLine2
+            )
           : queueVolunteerPayload?.success === true
             ? `${queueVolunteerPayload.data.homeArea}, ${queueVolunteerPayload.data.homeMunicipality}`
             : (intake?.rawAddress ?? "Address pending");
@@ -3705,6 +3908,10 @@ export async function getAdminInboxData(
       const isParsing =
         draft.parserVersion === PUBLIC_FORM_PARSING_VERSION ||
         intake?.status === "pending_review";
+      const snippet =
+        intake?.channel === "public_form"
+          ? (publicFormNote(intake) ?? draft.summary)
+          : (intake?.rawBody ?? draft.summary);
 
       return {
         id: draft.id,
@@ -3717,7 +3924,7 @@ export async function getAdminInboxData(
         sender: displayName || intake?.senderName || "Unknown sender",
         address,
         isParsing,
-        snippet: intake?.rawBody.slice(0, 90) ?? "",
+        snippet: snippet.slice(0, 90),
       } satisfies InboxQueueItem;
     }),
     selectedItem: {
@@ -3739,7 +3946,11 @@ export async function getAdminInboxData(
       receivedLabel: formatTime(selectedIntake?.receivedAt),
       address:
         parsedRequest?.addressLine1 && parsedRequest?.municipality
-          ? `${parsedRequest.addressLine1}, ${parsedRequest.municipality}`
+          ? formatAddressWithMunicipality(
+              parsedRequest.addressLine1,
+              parsedRequest.municipality,
+              parsedRequest.addressLine2
+            )
           : parsedVolunteer?.homeArea && parsedVolunteer?.homeMunicipality
             ? `${parsedVolunteer.homeArea}, ${parsedVolunteer.homeMunicipality}`
             : (selectedIntake?.rawAddress ?? "Address pending"),
@@ -3765,10 +3976,12 @@ export async function getAdminInboxData(
       rawParagraphs: rawParagraphsForReview(selectedIntake),
       needBy: parsedRequest?.dueBucket ?? "today",
       householdSize: String(parsedRequest?.householdSize ?? 1),
-      dietaryFlags: sentenceCaseList([
-        ...(parsedRequest?.dietaryTags ?? []),
-        ...(parsedRequest?.allergenFlags ?? []),
-      ]),
+      dietaryFlags: parsedRequest
+        ? formatFoodConstraintsForReview({
+            allergenFlags: parsedRequest.allergenFlags,
+            dietaryTags: parsedRequest.dietaryTags,
+          })
+        : "None",
       accessNotes: parsedRequest
         ? focusedRequestNotes(
             parsedRequest,
@@ -4297,15 +4510,28 @@ export async function hasSeededData() {
     return false;
   }
 
-  const countResult = await getDb()
-    .select({ count: sql<number>`count(*)` })
-    .from(routes);
+  const database = getDb();
+  const [clientCount, draftCount, depotCount, volunteerCount] =
+    await Promise.all([
+      database.select({ count: sql<number>`count(*)` }).from(clients),
+      database.select({ count: sql<number>`count(*)` }).from(intakeDrafts),
+      database.select({ count: sql<number>`count(*)` }).from(depots),
+      database.select({ count: sql<number>`count(*)` }).from(volunteers),
+    ]);
 
-  return Number(countResult[0]?.count ?? 0) > 0;
+  return [clientCount, draftCount, depotCount, volunteerCount].every(
+    (result) => Number(result[0]?.count ?? 0) > 0
+  );
 }
 
 export async function ensureSeededData() {
-  if (!(await hasSeededData())) {
-    await seedDemoData();
+  if (await hasSeededData()) {
+    return;
   }
+
+  await serializeDemoSeedMutation(async () => {
+    if (!(await hasSeededData())) {
+      await performSeedDemoData();
+    }
+  });
 }
