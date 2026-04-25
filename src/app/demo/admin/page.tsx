@@ -43,7 +43,7 @@ function AdminView({
     return <AdminInventoryView />;
   }
 
-  return <AdminDashboardView />;
+  return <AdminDashboardView demoMode />;
 }
 
 export default async function DemoAdminPage({

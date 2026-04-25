@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AdminInboxReview } from "@/components/mealflo/admin-inbox-review";
 import { Button } from "@/components/mealflo/button";
 import { MealfloIcon } from "@/components/mealflo/icon";
+import { ModalLayer } from "@/components/mealflo/modal-layer";
 import {
   Table,
   TableBody,
@@ -102,8 +103,8 @@ function RequestReviewModal({
     selected?.sourceChannel === "gmail" ? "Source" : "Form notes";
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex animate-[mfModalBackdropIn_180ms_var(--mf-ease-out)] items-center justify-center bg-[rgba(28,28,46,0.34)] px-3 py-4 backdrop-blur-[2px] sm:px-6"
+    <ModalLayer
+      className="flex animate-[mfModalBackdropIn_180ms_var(--mf-ease-out)] items-center justify-center bg-[rgba(28,28,46,0.34)] px-3 py-4 backdrop-blur-[2px] sm:px-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="inbox-review-title"
@@ -185,7 +186,7 @@ function RequestReviewModal({
           )}
         </div>
       </div>
-    </div>
+    </ModalLayer>
   );
 }
 

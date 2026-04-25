@@ -6,6 +6,7 @@ import { Badge } from "@/components/mealflo/badge";
 import { Button } from "@/components/mealflo/button";
 import { ChoiceChip } from "@/components/mealflo/field";
 import { MealfloIcon } from "@/components/mealflo/icon";
+import { ModalLayer } from "@/components/mealflo/modal-layer";
 import { cn } from "@/lib/utils";
 
 type RouteStopAction = {
@@ -167,8 +168,8 @@ export function AdminRouteActions({
       </div>
 
       {activeDialog ? (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-[rgba(24,24,46,0.44)] px-4 py-6"
+        <ModalLayer
+          className="grid place-items-center bg-[rgba(24,24,46,0.44)] px-4 py-6"
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
@@ -300,7 +301,7 @@ export function AdminRouteActions({
               </Button>
             </div>
           </div>
-        </div>
+        </ModalLayer>
       ) : null}
     </div>
   );

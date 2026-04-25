@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { AdminFrame, AdminRoutesView } from "@/views/admin";
 
 export const metadata = {
   title: "Routes",
@@ -7,5 +7,9 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default function AdminLivePage() {
-  redirect("/demo/admin?view=routes");
+  return (
+    <AdminFrame active="routes">
+      <AdminRoutesView />
+    </AdminFrame>
+  );
 }

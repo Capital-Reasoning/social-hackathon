@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { AdminDashboardView, AdminFrame } from "@/views/admin";
 
 export const metadata = {
   title: "Admin dashboard",
@@ -7,5 +7,9 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default function AdminPage() {
-  redirect("/demo/admin");
+  return (
+    <AdminFrame active="dashboard">
+      <AdminDashboardView />
+    </AdminFrame>
+  );
 }

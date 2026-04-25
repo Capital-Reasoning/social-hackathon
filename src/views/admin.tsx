@@ -476,12 +476,18 @@ export function AdminFrame({
   return (
     <div className="bg-bg min-h-screen">
       <AdminTopBar active={active} demoMode={demoMode} />
-      <PageFrame>{children}</PageFrame>
+      <PageFrame key={active} className="mf-admin-page-transition">
+        {children}
+      </PageFrame>
     </div>
   );
 }
 
-export async function AdminDashboardView() {
+export async function AdminDashboardView({
+  demoMode = false,
+}: {
+  demoMode?: boolean;
+}) {
   await ensureSeededData();
 
   const data = await getAdminDashboardData();
@@ -506,7 +512,7 @@ export async function AdminDashboardView() {
               <ButtonLink
                 className="h-[58px] text-lg font-semibold"
                 fullWidth
-                href="/demo/admin?view=routes"
+                href={adminHref("routes", demoMode)}
                 size="lg"
                 variant="primary"
                 leading={<MealfloIcon name="route-road" size={42} />}

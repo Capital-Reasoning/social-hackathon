@@ -8,6 +8,7 @@ import { Button } from "@/components/mealflo/button";
 import { CardHeader } from "@/components/mealflo/card";
 import { Field, Input, Select, Textarea } from "@/components/mealflo/field";
 import { MealfloIcon } from "@/components/mealflo/icon";
+import { ModalLayer } from "@/components/mealflo/modal-layer";
 import {
   formatInventoryLabel,
   ingredientSourceTypes,
@@ -693,8 +694,8 @@ export function AdminInventoryWorkflows({
       </section>
 
       {draft && draftModalOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex animate-[mfModalBackdropIn_180ms_var(--mf-ease-out)] items-center justify-center bg-[rgba(28,28,46,0.34)] px-3 py-4 backdrop-blur-[2px] sm:px-6"
+        <ModalLayer
+          className="flex animate-[mfModalBackdropIn_180ms_var(--mf-ease-out)] items-center justify-center bg-[rgba(28,28,46,0.34)] px-3 py-4 backdrop-blur-[2px] sm:px-6"
           role="dialog"
           aria-modal="true"
           aria-labelledby="inventory-draft-title"
@@ -828,7 +829,7 @@ export function AdminInventoryWorkflows({
               </div>
             </div>
           </div>
-        </div>
+        </ModalLayer>
       ) : null}
     </div>
   );

@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/mealflo/button";
 import { Field, Input, Select, Textarea } from "@/components/mealflo/field";
 import { MealfloIcon, type IconName } from "@/components/mealflo/icon";
+import { ModalLayer } from "@/components/mealflo/modal-layer";
 import {
   demoDriverControlEvent,
   demoDriverStatusEvent,
@@ -446,14 +447,22 @@ export function DemoShell({
   return (
     <div className="h-screen overflow-hidden bg-[#121724] text-white">
       {requestModalOpen ? (
-        <div className="text-ink fixed inset-0 z-50 grid place-items-center bg-black/48 px-4 py-6">
+        <ModalLayer
+          className="text-ink grid place-items-center bg-black/48 px-4 py-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="demo-request-title"
+        >
           <form
             onSubmit={submitRequestForm}
             className="border-line bg-bg max-h-[min(760px,92vh)] w-full max-w-[680px] overflow-y-auto rounded-[22px] border-[1.5px] p-5 shadow-[var(--mf-shadow-elevated)] sm:p-6"
           >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div className="space-y-1.5">
-                <h2 className="font-display text-ink text-[32px] font-semibold tracking-[-0.03em]">
+                <h2
+                  id="demo-request-title"
+                  className="font-display text-ink text-[32px] font-semibold tracking-[-0.03em]"
+                >
                   Add request
                 </h2>
                 <p className="text-muted text-sm leading-6">
@@ -619,7 +628,7 @@ export function DemoShell({
               </div>
             </div>
           </form>
-        </div>
+        </ModalLayer>
       ) : null}
       <div className="mx-auto flex h-screen w-full max-w-[1900px] flex-col gap-2 px-2 py-2">
         <header className="px-1 py-1">
