@@ -54,27 +54,25 @@ meals, guide drivers, and track completion.
            address, quantity, urgency, dietary needs,                     tagged by allergens or dietary restrictions.
            allergies, mobility needs, and delivery
            notes.
-                                                                                                                                 0 active     updates as stops complete
 
 
-
+                                                                                                                               0 active         Updates as stops complete
      3     Review volunteer availability                             4    Review generated routes                              READY TODAY
            Mealflo captures driver constraints such
            as available time, starting location, vehicle
                                                                           Deliveries are grouped into routes that
-                                                                          consider urgency, driver capacity, and
-                                                                                                                               Coordinator view
-           access, cooler capacity, stair comfort, and                    food requirements. The coordinator                   Client               Urgency      Meals
-           other limitations.                                             assigns a driver and confirms meals to
-                                                                          load.                                                Mabel Hart               9           2
+                                                                          consider urgency, driver capacity, and               Coordinator view
+           access, cooler capacity, stair comfort, and                    food requirements. The coordinator
+           other limitations.                                             assigns a driver and confirms meals to               Client               Urgency     Meals
+                                                                          load.
+                                                                                                                               Mabel Hart              9           2
 
-                                                                                                                               Keisha Noor              9           2
-
-     5     Guide the driver                                          6    Track completion                                     Noel Okafor              9           3
+                                                                                                                               Keisha Noor             9           2
+     5     Guide the driver                                          6    Track completion                                     Noel Okafor             9           3
            The driver mobile view shows the next                          As stops are completed, the dashboard
-           stop, address, meals to deliver, delivery                      updates so the operator can see what is              Priya Sandhu             9           3
+           stop, address, meals to deliver, delivery                      updates so the operator can see what is              Priya Sandhu            9           3
            notes, and a simple completion button.                         out for delivery, complete, and needing
-                                                                          follow-up without calling every driver.                                                View all
+                                                                          follow-up without calling every driver.                                               View all
 
 
 
