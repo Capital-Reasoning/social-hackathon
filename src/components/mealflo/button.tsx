@@ -28,7 +28,7 @@ type VariantProps = {
 };
 
 const baseClasses =
-  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border-[1.5px] font-medium whitespace-nowrap transition-[transform,background-color,border-color,color,opacity] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)] disabled:pointer-events-none disabled:opacity-55 active:scale-[0.97]";
+  "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-[10px] border-[1.5px] font-semibold whitespace-nowrap transition-[transform,background-color,border-color,color,opacity] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.5)] disabled:pointer-events-none disabled:opacity-55 active:scale-[0.97]";
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:

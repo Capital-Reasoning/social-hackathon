@@ -5,9 +5,11 @@ import { getDriverOfferData } from "@/server/mealflo/backend";
 
 function DriverTopBar() {
   return (
-    <div className="mf-enter flex w-full shrink-0 items-center px-1 py-1">
+    <div className="border-line mf-enter flex w-full shrink-0 items-center border-b-[1.5px] px-1 py-0.5 pb-2">
       <MealfloLogo
-        className="mx-auto gap-2.5"
+        className="mx-auto -translate-x-1.5 gap-2"
+        contextLabel="driver"
+        contextLabelClassName="ml-0.5 font-light"
         iconSize={34}
         showSubtitle={false}
         swatchClassName="bg-transparent border-transparent"

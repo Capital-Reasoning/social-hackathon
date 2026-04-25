@@ -2,18 +2,23 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import type { StaticImageData } from "next/image";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 
 import { MealfloIcon } from "@/components/mealflo/icon";
 import { publicEnv } from "@/lib/config/public-env";
 import { cn } from "@/lib/utils";
+import deliveryVan from "../../../design/assets/icons/delivery-van.png";
+import locationPin from "../../../design/assets/icons/location-pin.png";
+import mealContainer from "../../../design/assets/icons/meal-container.png";
 
 type MarkerPoint = {
+  icon?: "delivery-van" | "location-pin" | "meal-container";
   id: string;
   label: string;
   latitude: number;
   longitude: number;
-  tone: "primary" | "success" | "warning" | "info";
+  tone: "primary" | "success" | "warning" | "info" | "neutral";
 };
 
 type MapCanvasProps = {
@@ -21,8 +26,24 @@ type MapCanvasProps = {
   className?: string;
   children?: ReactNode;
   initialView?: "markers" | "greater-victoria";
+  interactionLocked?: boolean;
+  markerStyle?: "label" | "dot" | "icon";
   markers: readonly MarkerPoint[];
+  activePath?: readonly (readonly [number, number])[];
+  futurePath?: readonly (readonly [number, number])[];
   path?: readonly (readonly [number, number])[];
+  camera?: {
+    bearing?: number;
+    center?: {
+      latitude: number;
+      longitude: number;
+    };
+    duration?: number;
+    followMarkerId?: string;
+    mode?: "fit" | "driver";
+    pitch?: number;
+    zoom?: number;
+  };
   showNavigationControls?: boolean;
   showCenterControl?: boolean;
 };
@@ -54,11 +75,26 @@ const OSM_RASTER_STYLE: StyleSpecification = {
 };
 
 const toneColors: Record<MarkerPoint["tone"], string> = {
+  neutral: "#ffffff",
   primary: "#fae278",
   success: "#4ead6f",
   warning: "#f0a830",
   info: "#7890fa",
 };
+
+const toneBorders: Record<MarkerPoint["tone"], string> = {
+  neutral: "rgba(24, 24, 60, 0.3)",
+  primary: "rgba(170, 120, 0, 0.34)",
+  success: "rgba(46, 138, 80, 0.36)",
+  warning: "rgba(196, 125, 0, 0.36)",
+  info: "rgba(32, 56, 192, 0.34)",
+};
+
+const markerIcons = {
+  "delivery-van": deliveryVan,
+  "location-pin": locationPin,
+  "meal-container": mealContainer,
+} satisfies Record<NonNullable<MarkerPoint["icon"]>, StaticImageData>;
 
 function getMarkerLabel(label: string) {
   const words = label
@@ -88,19 +124,87 @@ function getMapStyle() {
   return publicEnv.mapStyleUrl;
 }
 
+function createRouteData(path?: readonly (readonly [number, number])[]) {
+  const routeCoordinates =
+    path && path.length > 1
+      ? path.map(([longitude, latitude]) => [longitude, latitude])
+      : [];
+
+  return routeCoordinates.length > 1
+    ? {
+        type: "Feature" as const,
+        geometry: {
+          type: "LineString" as const,
+          coordinates: routeCoordinates,
+        },
+        properties: {},
+      }
+    : {
+        type: "FeatureCollection" as const,
+        features: [],
+      };
+}
+
+function easeCamera(value: number) {
+  return 1 - Math.pow(1 - value, 3);
+}
+
+function setRouteSourceData({
+  data,
+  layer,
+  map,
+  paint,
+  source,
+}: {
+  data: ReturnType<typeof createRouteData>;
+  layer: string;
+  map: maplibregl.Map;
+  paint: maplibregl.LineLayerSpecification["paint"];
+  source: string;
+}) {
+  const existingSource = map.getSource(source) as
+    | maplibregl.GeoJSONSource
+    | undefined;
+
+  if (existingSource) {
+    existingSource.setData(data);
+    return;
+  }
+
+  map.addSource(source, {
+    type: "geojson",
+    data,
+  });
+
+  map.addLayer({
+    id: layer,
+    source,
+    type: "line",
+    paint,
+  });
+}
+
 export function MapCanvas({
+  activePath,
   centerControlLabel = "Center to me",
   children,
   className,
+  futurePath,
   initialView = "markers",
+  interactionLocked = false,
+  markerStyle = "label",
   markers,
   path,
+  camera,
   showNavigationControls = true,
   showCenterControl = false,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const lastFitKeyRef = useRef<string | null>(null);
   const [fallbackReason, setFallbackReason] = useState<string | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current || fallbackReason) {
@@ -111,6 +215,7 @@ export function MapCanvas({
     let map: maplibregl.Map | null = null;
     let frame = 0;
     let resizeFrame = 0;
+    const markerStore = mapMarkersRef.current;
 
     const handleMapError = (event: unknown) => {
       if (cleanedUp) {
@@ -142,17 +247,16 @@ export function MapCanvas({
         map = new maplibregl.Map({
           attributionControl: false,
           container: containerRef.current!,
+          interactive: !interactionLocked,
           style: getMapStyle(),
           center:
             initialView === "greater-victoria"
               ? [-123.48, 48.49]
-              : [
-                  markers[0]?.longitude ?? -123.3656,
-                  markers[0]?.latitude ?? 48.4284,
-                ],
+              : [-123.3656, 48.4284],
           zoom: initialView === "greater-victoria" ? 9.8 : 11.5,
         });
         mapRef.current = map;
+        setMapLoaded(false);
         resizeFrame = window.requestAnimationFrame(() => {
           map?.resize();
         });
@@ -162,7 +266,7 @@ export function MapCanvas({
         return;
       }
 
-      if (showNavigationControls) {
+      if (showNavigationControls && !interactionLocked) {
         map.addControl(
           new maplibregl.NavigationControl({ showCompass: false }),
           "top-right"
@@ -178,75 +282,7 @@ export function MapCanvas({
         }
 
         liveMap.resize();
-
-        if (path && path.length > 1) {
-          liveMap.addSource("mealflo-route", {
-            type: "geojson",
-            data: {
-              type: "Feature",
-              geometry: {
-                type: "LineString",
-                coordinates: path.map(([longitude, latitude]) => [
-                  longitude,
-                  latitude,
-                ]),
-              },
-              properties: {},
-            },
-          });
-
-          liveMap.addLayer({
-            id: "mealflo-route-line",
-            source: "mealflo-route",
-            type: "line",
-            paint: {
-              "line-color": "#3d5cf5",
-              "line-width": 5,
-              "line-opacity": 0.78,
-            },
-          });
-        }
-
-        const bounds = new maplibregl.LngLatBounds();
-
-        markers.forEach((marker) => {
-          const el = document.createElement("div");
-          el.className =
-            "flex min-h-11 items-center justify-center rounded-full border-[1.5px] border-white/90 px-3";
-          el.style.backgroundColor = toneColors[marker.tone];
-          const label = document.createElement("span");
-          label.textContent = getMarkerLabel(marker.label);
-          label.style.fontFamily = "var(--mf-font-body)";
-          label.style.fontSize = "11px";
-          label.style.fontWeight = "700";
-          label.style.letterSpacing = "0.02em";
-          label.style.color = "#1c1c2e";
-          el.append(label);
-
-          new maplibregl.Marker({ element: el, anchor: "center" })
-            .setLngLat([marker.longitude, marker.latitude])
-            .addTo(liveMap);
-
-          bounds.extend([marker.longitude, marker.latitude]);
-        });
-
-        if (initialView === "greater-victoria") {
-          liveMap.fitBounds(
-            [
-              [GREATER_VICTORIA_BOUNDS.west, GREATER_VICTORIA_BOUNDS.south],
-              [GREATER_VICTORIA_BOUNDS.east, GREATER_VICTORIA_BOUNDS.north],
-            ],
-            {
-              maxZoom: 11.15,
-              padding: 18,
-            }
-          );
-        } else if (!bounds.isEmpty()) {
-          liveMap.fitBounds(bounds, {
-            padding: 64,
-            maxZoom: 13,
-          });
-        }
+        setMapLoaded(true);
       });
     });
 
@@ -259,9 +295,211 @@ export function MapCanvas({
         map.remove();
       }
 
+      markerStore.clear();
       mapRef.current = null;
+      lastFitKeyRef.current = null;
+      setMapLoaded(false);
     };
-  }, [fallbackReason, initialView, markers, path, showNavigationControls]);
+  }, [fallbackReason, initialView, interactionLocked, showNavigationControls]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!map || !mapLoaded) {
+      return;
+    }
+
+    const routeActivePath = activePath ?? path;
+    const routeFuturePath = activePath ? futurePath : undefined;
+
+    setRouteSourceData({
+      data: createRouteData(routeFuturePath),
+      layer: "mealflo-route-future-line",
+      map,
+      paint: {
+        "line-color": "#73819b",
+        "line-width": camera?.mode === "driver" ? 5 : 4,
+        "line-opacity": camera?.mode === "driver" ? 0.38 : 0.44,
+      },
+      source: "mealflo-route-future",
+    });
+
+    setRouteSourceData({
+      data: createRouteData(routeActivePath),
+      layer: "mealflo-route-active-line",
+      map,
+      paint: {
+        "line-color": "#3d5cf5",
+        "line-width": camera?.mode === "driver" ? 7 : 5,
+        "line-opacity": 0.84,
+      },
+      source: "mealflo-route-active",
+    });
+
+    const liveMarkerIds = new Set(markers.map((marker) => marker.id));
+
+    for (const [id, marker] of mapMarkersRef.current) {
+      if (!liveMarkerIds.has(id)) {
+        marker.remove();
+        mapMarkersRef.current.delete(id);
+      }
+    }
+
+    for (const marker of markers) {
+      const existing = mapMarkersRef.current.get(marker.id);
+
+      if (existing) {
+        existing.setLngLat([marker.longitude, marker.latitude]);
+        continue;
+      }
+
+      const el = document.createElement("div");
+      el.title = marker.label;
+      el.setAttribute("aria-label", marker.label);
+
+      if (markerStyle === "dot") {
+        el.className =
+          "flex h-4 w-4 items-center justify-center rounded-full border-[2px] border-white/95 shadow-sm";
+        el.style.backgroundColor = toneColors[marker.tone];
+        el.style.boxShadow = "0 2px 7px rgba(24, 24, 60, 0.24)";
+
+        const innerDot = document.createElement("span");
+        innerDot.style.width = "6px";
+        innerDot.style.height = "6px";
+        innerDot.style.borderRadius = "999px";
+        innerDot.style.backgroundColor = "#1c1c2e";
+        innerDot.style.opacity = "0.72";
+        el.append(innerDot);
+      } else if (markerStyle === "icon") {
+        el.className =
+          "flex h-11 w-11 items-center justify-center rounded-full border-[1.5px] border-white/95 bg-white/90 shadow-[0_6px_16px_rgba(24,24,60,0.14)]";
+        el.style.borderColor = toneBorders[marker.tone];
+
+        const image = document.createElement("img");
+        image.alt = "";
+        image.src = markerIcons[marker.icon ?? "location-pin"].src;
+        image.style.width = marker.icon === "delivery-van" ? "32px" : "27px";
+        image.style.height = marker.icon === "delivery-van" ? "32px" : "27px";
+        image.style.objectFit = "contain";
+        el.append(image);
+      } else {
+        el.className =
+          "flex min-h-11 items-center justify-center rounded-full border-[1.5px] border-white/90 px-3";
+        el.style.backgroundColor = toneColors[marker.tone];
+        el.style.borderColor = toneBorders[marker.tone];
+
+        const label = document.createElement("span");
+        label.textContent = getMarkerLabel(marker.label);
+        label.style.fontFamily = "var(--mf-font-body)";
+        label.style.fontSize = "11px";
+        label.style.fontWeight = "700";
+        label.style.letterSpacing = "0.02em";
+        label.style.color = "#1c1c2e";
+        el.append(label);
+      }
+
+      const createdMarker = new maplibregl.Marker({
+        element: el,
+        anchor: "center",
+      })
+        .setLngLat([marker.longitude, marker.latitude])
+        .addTo(map);
+
+      mapMarkersRef.current.set(marker.id, createdMarker);
+    }
+
+    const followMarker = camera?.followMarkerId
+      ? markers.find((marker) => marker.id === camera.followMarkerId)
+      : null;
+
+    const cameraCenter = camera?.center
+      ? ([camera.center.longitude, camera.center.latitude] as [number, number])
+      : followMarker
+        ? ([followMarker.longitude, followMarker.latitude] as [number, number])
+        : null;
+
+    if (camera?.mode === "driver" && cameraCenter) {
+      map.easeTo({
+        bearing: camera.bearing ?? map.getBearing(),
+        center: cameraCenter,
+        duration: camera.duration ?? 120,
+        easing: easeCamera,
+        pitch: camera.pitch ?? 48,
+        zoom: camera.zoom ?? 16.35,
+      });
+      return;
+    }
+
+    if (initialView === "greater-victoria") {
+      const fitKey = "greater-victoria";
+
+      if (lastFitKeyRef.current === fitKey) {
+        return;
+      }
+
+      map.fitBounds(
+        [
+          [GREATER_VICTORIA_BOUNDS.west, GREATER_VICTORIA_BOUNDS.south],
+          [GREATER_VICTORIA_BOUNDS.east, GREATER_VICTORIA_BOUNDS.north],
+        ],
+        {
+          maxZoom: 11.15,
+          padding: 18,
+        }
+      );
+      lastFitKeyRef.current = fitKey;
+      return;
+    }
+
+    const bounds = new maplibregl.LngLatBounds();
+    const pathPoints = [...(routeFuturePath ?? []), ...(routeActivePath ?? [])];
+    const fitKey = JSON.stringify({
+      markers: markers.map((marker) => [
+        marker.id,
+        Number(marker.longitude.toFixed(5)),
+        Number(marker.latitude.toFixed(5)),
+      ]),
+      path: pathPoints.map(([longitude, latitude]) => [
+        Number(longitude.toFixed(5)),
+        Number(latitude.toFixed(5)),
+      ]),
+    });
+
+    if (lastFitKeyRef.current === fitKey) {
+      return;
+    }
+
+    markers.forEach((marker) => {
+      bounds.extend([marker.longitude, marker.latitude]);
+    });
+
+    pathPoints.forEach(([longitude, latitude]) => {
+      bounds.extend([longitude, latitude]);
+    });
+
+    if (!bounds.isEmpty()) {
+      map.fitBounds(bounds, {
+        maxZoom: camera?.mode === "fit" ? 14.25 : 13.8,
+        padding: camera?.mode === "fit" ? 20 : 48,
+      });
+      lastFitKeyRef.current = fitKey;
+    }
+  }, [
+    camera?.bearing,
+    camera?.center,
+    camera?.duration,
+    camera?.followMarkerId,
+    camera?.mode,
+    camera?.pitch,
+    camera?.zoom,
+    activePath,
+    futurePath,
+    initialView,
+    mapLoaded,
+    markerStyle,
+    markers,
+    path,
+  ]);
 
   const centerMarker =
     markers.find((marker) => marker.id.includes("driver")) ?? markers[0];
@@ -298,7 +536,10 @@ export function MapCanvas({
         <div
           ref={containerRef}
           aria-label="Map preview"
-          className="absolute inset-0 h-full w-full"
+          className={cn(
+            "absolute inset-0 h-full w-full",
+            interactionLocked ? "pointer-events-none" : null
+          )}
         />
       ) : (
         <div

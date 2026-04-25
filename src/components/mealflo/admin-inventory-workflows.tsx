@@ -200,9 +200,7 @@ export function AdminInventoryWorkflows({
       }
 
       setDraft(payload.data);
-      setParseStatus(
-        `${payload.data.items.length} draft items ready at ${payload.data.confidence}% confidence.`
-      );
+      setParseStatus(`${payload.data.items.length} draft items ready.`);
     } catch (error) {
       setParseStatus(
         error instanceof Error ? error.message : "Receipt parsing failed."
@@ -393,8 +391,7 @@ export function AdminInventoryWorkflows({
                 <div className="space-y-1">
                   <p className="text-ink font-medium">Suggested sort</p>
                   <p className="text-muted text-sm leading-6">
-                    {suggestion.label}, {suggestion.confidence}% confidence.{" "}
-                    {suggestion.reason}
+                    {suggestion.label}. {suggestion.reason}
                   </p>
                 </div>
                 <Button
@@ -540,7 +537,6 @@ export function AdminInventoryWorkflows({
             <div className="space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap gap-2">
-                  <Badge tone="info">{draft.confidence}% confidence</Badge>
                   <Badge tone="neutral">{draft.items.length} items</Badge>
                 </div>
                 <Button

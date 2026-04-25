@@ -139,7 +139,6 @@ export const inboxItems = [
     subject: "Need meals for Friday",
     sender: "Maya Johnson",
     status: "needs review",
-    confidence: "91%",
     address: "1655 Commercial Dr, Vancouver",
     snippet: "Two seniors, elevator access, soft foods if possible.",
   },
@@ -148,8 +147,7 @@ export const inboxItems = [
     channel: "form",
     subject: "Volunteer signup",
     sender: "Chris Lee",
-    status: "low confidence",
-    confidence: "74%",
+    status: "needs review",
     address: "Kerrisdale start area",
     snippet: "Available after 4 PM with hatchback.",
   },
@@ -159,7 +157,6 @@ export const inboxItems = [
     subject: "Urgent hamper request",
     sender: "Aunt Leah's House",
     status: "needs review",
-    confidence: "88%",
     address: "2550 Fraser St, Vancouver",
     snippet: "Family of four, peanut allergy, building callbox 19.",
   },
@@ -169,22 +166,18 @@ export const inboxFields = [
   {
     label: "Need by",
     value: "Today, 5 PM",
-    confidence: "high",
   },
   {
     label: "Household size",
     value: "4",
-    confidence: "medium",
   },
   {
     label: "Dietary flags",
     value: "Peanut allergy",
-    confidence: "high",
   },
   {
     label: "Access notes",
     value: "Callbox 19",
-    confidence: "low",
   },
 ] as const;
 

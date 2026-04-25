@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Badge } from "@/components/mealflo/badge";
 import { Button, ButtonLink } from "@/components/mealflo/button";
 import { Card } from "@/components/mealflo/card";
-import { ChoiceChip } from "@/components/mealflo/field";
 import { IconSwatch, MealfloIcon } from "@/components/mealflo/icon";
 import {
   demoDriverControlEvent,
@@ -14,9 +12,9 @@ import {
 import { MapCanvas } from "@/components/mealflo/map-canvas";
 import type {
   DriverOfferData,
+  DriverRouteDirection,
   DriverRouteOption,
   DriverRouteStop,
-  LiveMarker,
 } from "@/server/mealflo/backend";
 import { cn } from "@/lib/utils";
 
@@ -26,9 +24,11 @@ type DriverMobileFlowProps = {
   initialScreen?: DriverScreen;
 };
 
-type DriverScreen = "welcome" | "availability" | "offer" | "active" | "stop";
+type DriverScreen = "availability" | "offer" | "active" | "stop";
 type LocationMode = "asking" | "blocked" | "demo" | "gps" | "idle";
 type StopOutcome = "could_not_deliver" | "delivered";
+type CompletionStage = "celebrating" | "driving" | "idle";
+type RouteDrivePhase = "collecting" | "idle" | "to_stop";
 
 type SessionResponse = {
   data?: {
@@ -43,29 +43,46 @@ type StoredProgress = {
   completedStops: Record<string, StopOutcome>;
   currentStopIndex: number;
 };
+type MapDirection = Pick<
+  DriverRouteDirection,
+  "distance" | "duration" | "instruction"
+> & {
+  sequence?: number;
+};
+type DirectionGlyphKind = "arrive" | "left" | "pickup" | "right" | "straight";
 
 const progressKey = (routeId: string) => `mealflo-driver-progress:${routeId}`;
 const fingerprintKey = "mealflo-device-fingerprint";
+const driveAnimationTuning = {
+  bearingLookaheadMeters: 44,
+  bearingMaxDegreesPerSecond: 145,
+  bearingSmoothingMs: 560,
+  cameraLookaheadMeters: 75,
+  cameraMoveDurationMs: 180,
+  maxDurationMs: 90_000,
+  minDurationMs: 10_000,
+  targetSpeedKmh: 100,
+};
 const phoneScrollScreenClass =
   "mf-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1 pb-2";
 
 function formatAvailabilityLabel(minutes: number) {
   if (minutes === 60) {
-    return "1 hr";
+    return "1hr";
   }
 
   if (minutes % 60 === 0) {
-    return `${minutes / 60} hr`;
+    return `${minutes / 60}hr`;
   }
 
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
 
   if (hours > 0) {
-    return `${hours} hr ${remainingMinutes} min`;
+    return `${hours}hr ${remainingMinutes}min`;
   }
 
-  return `${remainingMinutes} min`;
+  return `${remainingMinutes}min`;
 }
 
 function getDeviceFingerprint() {
@@ -88,6 +105,82 @@ function getRouteStart(routeLine: ReadonlyArray<readonly [number, number]>) {
     currentLat: latitude,
     currentLng: longitude,
   };
+}
+
+function toRouteCoordinate(position: {
+  currentLat: number;
+  currentLng: number;
+}) {
+  return [position.currentLng, position.currentLat] as const;
+}
+
+function distanceMeters(
+  from: readonly [number, number],
+  to: readonly [number, number]
+) {
+  const earthMeters = 6_371_000;
+  const dLat = ((to[1] - from[1]) * Math.PI) / 180;
+  const dLng = ((to[0] - from[0]) * Math.PI) / 180;
+  const lat1 = (from[1] * Math.PI) / 180;
+  const lat2 = (to[1] * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+  return 2 * earthMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function bearingBetween(
+  from: readonly [number, number],
+  to: readonly [number, number]
+) {
+  const fromLat = (from[1] * Math.PI) / 180;
+  const toLat = (to[1] * Math.PI) / 180;
+  const dLng = ((to[0] - from[0]) * Math.PI) / 180;
+  const y = Math.sin(dLng) * Math.cos(toLat);
+  const x =
+    Math.cos(fromLat) * Math.sin(toLat) -
+    Math.sin(fromLat) * Math.cos(toLat) * Math.cos(dLng);
+
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+function normalizeBearing(value: number) {
+  return ((value % 360) + 360) % 360;
+}
+
+function shortestBearingDelta(from: number, to: number) {
+  return ((to - from + 540) % 360) - 180;
+}
+
+function smoothBearing({
+  deltaMs,
+  previous,
+  target,
+}: {
+  deltaMs: number;
+  previous?: number;
+  target?: number;
+}) {
+  if (target === undefined) {
+    return previous;
+  }
+
+  if (previous === undefined) {
+    return normalizeBearing(target);
+  }
+
+  const delta = shortestBearingDelta(previous, target);
+  const smoothingFactor =
+    1 - Math.exp(-deltaMs / driveAnimationTuning.bearingSmoothingMs);
+  const easedFactor = 1 - Math.pow(1 - smoothingFactor, 3);
+  const maxDelta =
+    driveAnimationTuning.bearingMaxDegreesPerSecond * (deltaMs / 1000);
+  const nextDelta =
+    Math.sign(delta) *
+    Math.min(Math.abs(delta) * easedFactor, maxDelta, Math.abs(delta));
+
+  return normalizeBearing(previous + nextDelta);
 }
 
 function readStoredProgress(route: DriverRouteOption): StoredProgress {
@@ -134,16 +227,21 @@ function displayDriverLabel(value: string) {
     .replace(/Fridge/g, "Needs refrigeration");
 }
 
-function getStopWarnings(stop: DriverRouteStop) {
-  return stop.warnings.length > 0
-    ? stop.warnings.map(displayDriverLabel)
-    : ["Standard handoff"];
-}
-
 function getCurrentRouteDirection(
   route: DriverRouteOption,
-  currentStopIndex: number
+  currentStopIndex: number,
+  stepOffset = 0
 ) {
+  const segmentDirections = route.routeDirections.filter(
+    (direction) => direction.segmentIndex === currentStopIndex
+  );
+
+  if (segmentDirections.length > 0) {
+    return segmentDirections[
+      Math.min(stepOffset, segmentDirections.length - 1)
+    ]!;
+  }
+
   return (
     route.routeDirections.find(
       (direction) => direction.segmentIndex >= currentStopIndex
@@ -153,8 +251,90 @@ function getCurrentRouteDirection(
   );
 }
 
-function pickRoute(routes: DriverRouteOption[], minutesAvailable: number) {
-  const fitting = routes
+function formatMapDistanceMeters(value: number) {
+  if (value <= 0) {
+    return "0 m";
+  }
+
+  if (value < 1000) {
+    return `${Math.max(10, Math.round(value / 10) * 10)} m`;
+  }
+
+  return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)} km`;
+}
+
+function getDirectionProgress(
+  segmentDirections: DriverRouteOption["routeDirections"],
+  distanceAlongLine: number
+) {
+  if (segmentDirections.length === 0) {
+    return {
+      remainingMeters: null,
+      stepIndex: 0,
+    };
+  }
+
+  let walked = 0;
+
+  for (let index = 0; index < segmentDirections.length; index += 1) {
+    const direction = segmentDirections[index]!;
+    const stepDistance = Math.max(direction.distanceMeters, 0);
+    const nextWalked = walked + stepDistance;
+
+    if (
+      distanceAlongLine <= nextWalked ||
+      index === segmentDirections.length - 1
+    ) {
+      return {
+        remainingMeters: Math.max(nextWalked - distanceAlongLine, 0),
+        stepIndex: index,
+      };
+    }
+
+    walked = nextWalked;
+  }
+
+  return {
+    remainingMeters: 0,
+    stepIndex: segmentDirections.length - 1,
+  };
+}
+
+function getDirectionGlyphKind(instruction: string): DirectionGlyphKind {
+  const normalized = instruction.toLowerCase();
+
+  if (normalized.includes("collect") || normalized.includes("pickup")) {
+    return "pickup";
+  }
+
+  if (normalized.includes("arrive")) {
+    return "arrive";
+  }
+
+  if (normalized.includes("left")) {
+    return "left";
+  }
+
+  if (normalized.includes("right")) {
+    return "right";
+  }
+
+  return "straight";
+}
+
+function pickRoute(
+  routes: DriverRouteOption[],
+  availabilityOptions: number[],
+  minutesAvailable: number
+) {
+  const sortedRoutes = routes
+    .slice()
+    .sort(
+      (left, right) =>
+        left.plannedTotalMinutes - right.plannedTotalMinutes ||
+        left.name.localeCompare(right.name)
+    );
+  const fitting = sortedRoutes
     .filter((route) => route.plannedTotalMinutes <= minutesAvailable)
     .sort(
       (left, right) =>
@@ -162,17 +342,261 @@ function pickRoute(routes: DriverRouteOption[], minutesAvailable: number) {
         left.name.localeCompare(right.name)
     );
 
-  return (
-    fitting[0] ??
-    routes
-      .slice()
-      .sort(
-        (left, right) =>
-          left.plannedTotalMinutes - right.plannedTotalMinutes ||
-          left.name.localeCompare(right.name)
-      )[0] ??
-    routes[0]
+  const selectedAvailabilityIndex = availabilityOptions.findIndex(
+    (minutes) => minutes === minutesAvailable
   );
+  const fallbackByIndex =
+    selectedAvailabilityIndex >= 0
+      ? sortedRoutes[
+          Math.min(
+            selectedAvailabilityIndex,
+            Math.max(sortedRoutes.length - 1, 0)
+          )
+        ]
+      : null;
+
+  return fitting[0] ?? fallbackByIndex ?? sortedRoutes[0] ?? routes[0];
+}
+
+function findClosestLineIndex(
+  line: ReadonlyArray<readonly [number, number]>,
+  point: readonly [number, number]
+) {
+  let closestIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  line.forEach((coordinate, index) => {
+    const distance = distanceMeters(coordinate, point);
+
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+
+  return closestIndex;
+}
+
+function interpolatePosition(
+  from: readonly [number, number],
+  to: readonly [number, number],
+  ratio: number
+) {
+  return [
+    from[0] + (to[0] - from[0]) * ratio,
+    from[1] + (to[1] - from[1]) * ratio,
+  ] as const;
+}
+
+function buildDriveAnimationLine({
+  from,
+  route,
+  stopIndex,
+}: {
+  from: { currentLat: number; currentLng: number };
+  route: DriverRouteOption;
+  stopIndex: number;
+}) {
+  const start = toRouteCoordinate(from);
+  const destinationStop = route.stops[stopIndex + 1];
+
+  if (!destinationStop) {
+    const currentStop = route.stops[stopIndex];
+
+    return currentStop
+      ? [start, [currentStop.longitude, currentStop.latitude] as const]
+      : [start];
+  }
+
+  return buildRouteLineBetween({
+    from: start,
+    route,
+    to: [destinationStop.longitude, destinationStop.latitude] as const,
+  });
+}
+
+function buildRouteLineBetween({
+  from,
+  route,
+  to,
+}: {
+  from: readonly [number, number];
+  route: DriverRouteOption;
+  to: readonly [number, number];
+}) {
+  const startIndex = findClosestLineIndex(route.routeLine, from);
+  const endIndex = findClosestLineIndex(route.routeLine, to);
+  const sliced =
+    endIndex > startIndex
+      ? route.routeLine.slice(startIndex, endIndex + 1)
+      : [];
+
+  return sliced.length > 1 ? [from, ...sliced, to] : [from, to];
+}
+
+function buildFutureRouteLine({
+  route,
+  stopIndex,
+}: {
+  route: DriverRouteOption;
+  stopIndex: number;
+}) {
+  const stop = route.stops[stopIndex];
+
+  if (!stop) {
+    return [];
+  }
+
+  const stopCoordinate = [stop.longitude, stop.latitude] as const;
+  const startIndex = findClosestLineIndex(route.routeLine, stopCoordinate);
+  const futureCoordinates = route.routeLine.slice(startIndex + 1);
+
+  return futureCoordinates.length > 0
+    ? [stopCoordinate, ...futureCoordinates]
+    : [];
+}
+
+function getLineDistanceMeters(line: ReadonlyArray<readonly [number, number]>) {
+  return line
+    .slice(1)
+    .reduce(
+      (sum, coordinate, index) =>
+        sum + distanceMeters(line[index]!, coordinate),
+      0
+    );
+}
+
+function getRemainingLineFromDistance({
+  distanceAlongLine,
+  line,
+}: {
+  distanceAlongLine: number;
+  line: ReadonlyArray<readonly [number, number]>;
+}) {
+  if (line.length <= 1) {
+    return line;
+  }
+
+  const distances = line
+    .slice(1)
+    .map((coordinate, index) => distanceMeters(line[index]!, coordinate));
+  let walked = 0;
+
+  for (let index = 0; index < distances.length; index += 1) {
+    const legDistance = distances[index]!;
+    const nextWalked = walked + legDistance;
+
+    if (nextWalked >= distanceAlongLine) {
+      const from = line[index]!;
+      const to = line[index + 1]!;
+      const current = interpolatePosition(
+        from,
+        to,
+        legDistance === 0 ? 1 : (distanceAlongLine - walked) / legDistance
+      );
+      const upcoming = distanceMeters(current, to) < 1 ? index + 2 : index + 1;
+
+      return [current, ...line.slice(upcoming)];
+    }
+
+    walked = nextWalked;
+  }
+
+  return [line.at(-1)!];
+}
+
+function getDriveAnimationDurationMs(
+  line: ReadonlyArray<readonly [number, number]>
+) {
+  const metersPerSecond = (driveAnimationTuning.targetSpeedKmh * 1000) / 3600;
+  const duration = (getLineDistanceMeters(line) / metersPerSecond) * 1000;
+
+  return Math.round(
+    Math.min(
+      Math.max(duration, driveAnimationTuning.minDurationMs),
+      driveAnimationTuning.maxDurationMs
+    )
+  );
+}
+
+function getLinePointWithBearing(
+  line: ReadonlyArray<readonly [number, number]>,
+  progress: number
+) {
+  if (line.length <= 1) {
+    return {
+      bearing: undefined,
+      coordinate: line[0] ?? ([-123.3656, 48.4284] as const),
+      distanceAlongLine: 0,
+    };
+  }
+
+  const distances = line
+    .slice(1)
+    .map((coordinate, index) => distanceMeters(line[index]!, coordinate));
+  const totalDistance = distances.reduce((sum, distance) => sum + distance, 0);
+  const targetDistance = totalDistance * progress;
+  let walked = 0;
+
+  for (let index = 0; index < distances.length; index += 1) {
+    const legDistance = distances[index]!;
+
+    if (walked + legDistance >= targetDistance) {
+      const from = line[index]!;
+      const to = line[index + 1]!;
+
+      return {
+        bearing: bearingBetween(from, to),
+        coordinate: interpolatePosition(
+          from,
+          to,
+          legDistance === 0 ? 1 : (targetDistance - walked) / legDistance
+        ),
+        distanceAlongLine: targetDistance,
+      };
+    }
+
+    walked += legDistance;
+  }
+
+  return {
+    bearing: bearingBetween(line.at(-2)!, line.at(-1)!),
+    coordinate: line.at(-1)!,
+    distanceAlongLine: totalDistance,
+  };
+}
+
+function getCameraBearingTarget({
+  coordinate,
+  distanceAlongLine,
+  fallbackBearing,
+  line,
+  lineDistance,
+}: {
+  coordinate: readonly [number, number];
+  distanceAlongLine: number;
+  fallbackBearing?: number;
+  line: ReadonlyArray<readonly [number, number]>;
+  lineDistance: number;
+}) {
+  if (lineDistance <= 0) {
+    return fallbackBearing;
+  }
+
+  const lookaheadDistance = Math.min(
+    distanceAlongLine + driveAnimationTuning.bearingLookaheadMeters,
+    lineDistance
+  );
+  const { coordinate: lookaheadCoordinate } = getLinePointWithBearing(
+    line,
+    lookaheadDistance / lineDistance
+  );
+
+  if (distanceMeters(coordinate, lookaheadCoordinate) < 3) {
+    return fallbackBearing;
+  }
+
+  return bearingBetween(coordinate, lookaheadCoordinate);
 }
 
 function formatPhoneHref(phone: string | null) {
@@ -186,10 +610,12 @@ function formatPhoneHref(phone: string | null) {
 function ProgressDots({
   completedStops,
   currentStopIndex,
+  isMoving = false,
   stops,
 }: {
   completedStops: Record<string, StopOutcome>;
   currentStopIndex: number;
+  isMoving?: boolean;
   stops: DriverRouteStop[];
 }) {
   return (
@@ -197,10 +623,12 @@ function ProgressDots({
       {stops.map((stop, index) => {
         const outcome = completedStops[stop.id];
         const active = index === currentStopIndex && !outcome;
+        const state = outcome ?? (active ? "in_progress" : "pending");
 
         return (
           <span
             key={stop.id}
+            aria-label={`${stop.name}: ${state.replaceAll("_", " ")}`}
             className={cn(
               "h-2.5 flex-1 rounded-full transition-[background-color,transform] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-out)]",
               outcome === "delivered"
@@ -208,9 +636,14 @@ function ProgressDots({
                 : outcome === "could_not_deliver"
                   ? "bg-[var(--mf-color-red-300)]"
                   : active
-                    ? "bg-action scale-y-125"
+                    ? cn(
+                        "bg-action scale-y-125",
+                        isMoving && "mf-route-progress-pulse"
+                      )
                     : "bg-[rgba(24,24,60,0.14)]"
             )}
+            data-moving={active && isMoving ? "true" : "false"}
+            data-progress-state={state}
           />
         );
       })}
@@ -221,9 +654,11 @@ function ProgressDots({
 function MetricStrip({
   route,
   remainingCount,
+  showRemaining = true,
 }: {
   remainingCount: number;
   route: DriverRouteOption;
+  showRemaining?: boolean;
 }) {
   const items = [
     {
@@ -238,19 +673,23 @@ function MetricStrip({
       label: "Total",
       value: route.totalPlannedTime,
     },
-    {
-      label: "Left",
-      value: String(remainingCount),
-    },
-  ];
+    showRemaining
+      ? {
+          label: "Left",
+          value: String(remainingCount),
+        }
+      : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   return (
-    <div className="grid grid-cols-4 divide-x divide-[rgba(24,24,60,0.12)] rounded-[16px] border-y-[1.5px] border-[rgba(24,24,60,0.12)] bg-[rgba(255,253,240,0.46)]">
+    <div
+      className={cn(
+        "grid divide-x divide-[rgba(24,24,60,0.18)] rounded-[16px] border-[1.5px] border-[rgba(24,24,60,0.24)] bg-[rgba(255,253,240,0.68)]",
+        showRemaining ? "grid-cols-4" : "grid-cols-3"
+      )}
+    >
       {items.map((item) => (
-        <div
-          key={item.label}
-          className="px-2 py-3 text-center"
-        >
+        <div key={item.label} className="px-2 py-3 text-center">
           <p className="font-display text-ink text-[23px] leading-none font-semibold tracking-[-0.02em]">
             {item.value}
           </p>
@@ -304,54 +743,233 @@ function CallButton({
   );
 }
 
+function DirectionGlyph({
+  instruction,
+  size = 42,
+}: {
+  instruction: string;
+  size?: number;
+}) {
+  const kind = getDirectionGlyphKind(instruction);
+  const rotationByKind: Record<DirectionGlyphKind, number> = {
+    arrive: 0,
+    left: -90,
+    pickup: 0,
+    right: 90,
+    straight: 0,
+  };
+
+  if (kind === "pickup") {
+    return (
+      <span
+        className="border-line flex shrink-0 items-center justify-center rounded-[14px] border-[1.5px] bg-[rgba(250,226,120,0.24)]"
+        style={{ height: size, width: size }}
+      >
+        <MealfloIcon name="meal-container" size={26} />
+      </span>
+    );
+  }
+
+  if (kind === "arrive") {
+    return (
+      <span
+        className="border-line flex shrink-0 items-center justify-center rounded-[14px] border-[1.5px] bg-[rgba(240,243,255,0.78)]"
+        style={{ height: size, width: size }}
+      >
+        <MealfloIcon name="flag" size={25} />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="border-line flex shrink-0 items-center justify-center rounded-[14px] border-[1.5px] bg-[rgba(240,243,255,0.78)]"
+      style={{ height: size, width: size }}
+      aria-hidden
+    >
+      <span
+        className="relative block h-7 w-7 transition-transform duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)]"
+        style={{ transform: `rotate(${rotationByKind[kind]}deg)` }}
+      >
+        <span className="bg-action absolute top-1 left-1/2 h-5 w-[3px] -translate-x-1/2 rounded-full" />
+        <span className="border-action absolute top-1 left-1/2 h-3.5 w-3.5 -translate-x-1/2 rotate-45 border-t-[3px] border-l-[3px]" />
+      </span>
+    </span>
+  );
+}
+
+function TurnByTurnDirection({ direction }: { direction: MapDirection }) {
+  const directionKey = `${direction.sequence ?? "pickup"}-${direction.instruction}`;
+  const keyRef = useRef(directionKey);
+  const previousDirectionRef = useRef<MapDirection | null>(direction);
+  const [animationId, setAnimationId] = useState(0);
+  const [exitingDirection, setExitingDirection] = useState<MapDirection | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (keyRef.current === directionKey) {
+      return;
+    }
+
+    setExitingDirection(previousDirectionRef.current);
+    setAnimationId((value) => value + 1);
+    keyRef.current = directionKey;
+
+    const timeout = window.setTimeout(() => {
+      setExitingDirection(null);
+    }, 420);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [directionKey]);
+
+  useEffect(() => {
+    previousDirectionRef.current = direction;
+  }, [direction]);
+
+  return (
+    <div className="absolute inset-x-3 top-3 z-20 overflow-hidden rounded-[16px] border-[1.5px] border-[rgba(120,144,250,0.24)] bg-white/92 shadow-[0_10px_28px_rgba(24,24,60,0.1)] backdrop-blur">
+      {exitingDirection ? (
+        <div className="mf-direction-slide-out absolute inset-0 flex items-center gap-3 px-3 py-2.5">
+          <MealfloIcon name="route-road" size={30} />
+          <div className="min-w-0 flex-1">
+            <p className="text-muted text-xs leading-4 font-semibold">
+              {exitingDirection.distance} · {exitingDirection.duration}
+            </p>
+            <p className="text-ink mt-0.5 line-clamp-2 text-[15px] leading-5 font-semibold">
+              {exitingDirection.instruction}
+            </p>
+          </div>
+          <DirectionGlyph instruction={exitingDirection.instruction} />
+        </div>
+      ) : null}
+
+      <div
+        key={`${directionKey}-${animationId}`}
+        className="mf-direction-slide-in relative flex items-center gap-3 px-3 py-2.5"
+      >
+        <MealfloIcon name="route-road" size={30} />
+        <div className="min-w-0 flex-1">
+          <p className="text-muted text-xs leading-4 font-semibold">
+            {direction.distance} · {direction.duration}
+          </p>
+          <p className="text-ink mt-0.5 line-clamp-2 text-[15px] leading-5 font-semibold">
+            {direction.instruction}
+          </p>
+        </div>
+        <DirectionGlyph instruction={direction.instruction} />
+      </div>
+    </div>
+  );
+}
+
 function RouteMap({
+  activeRoutePath,
+  cameraPosition,
   children,
   className,
   currentPosition,
   currentStop,
+  drivingBearing,
+  navigationStopIndex,
   route,
+  view = "offer",
 }: {
+  activeRoutePath?: ReadonlyArray<readonly [number, number]>;
+  cameraPosition?: { currentLat: number; currentLng: number } | null;
   children?: React.ReactNode;
   className?: string;
   currentPosition: { currentLat: number; currentLng: number };
   currentStop: DriverRouteStop | null;
+  drivingBearing?: number;
+  navigationStopIndex?: number;
   route: DriverRouteOption;
+  view?: "active" | "offer";
 }) {
-  const markers = useMemo<LiveMarker[]>(() => {
+  const targetStop =
+    navigationStopIndex !== undefined
+      ? route.stops[navigationStopIndex]
+      : currentStop;
+  const activeStopIndex = targetStop
+    ? route.stops.findIndex((stop) => stop.id === targetStop.id)
+    : -1;
+  const activePath =
+    view === "active"
+      ? (activeRoutePath ??
+        (targetStop && activeStopIndex >= 0
+          ? buildRouteLineBetween({
+              from: toRouteCoordinate(currentPosition),
+              route,
+              to: [targetStop.longitude, targetStop.latitude] as const,
+            })
+          : []))
+      : undefined;
+  const futurePath =
+    view === "active" && activeStopIndex >= 0
+      ? buildFutureRouteLine({ route, stopIndex: activeStopIndex })
+      : undefined;
+
+  const markers = useMemo(() => {
     const start = getRouteStart(route.routeLine);
     const stopMarkers = route.stops.map((stop, index) => ({
       id: stop.id,
+      icon: "location-pin" as const,
       label: index === 0 ? "First stop" : `Stop ${index + 1}`,
       latitude: stop.latitude,
       longitude: stop.longitude,
       tone:
-        currentStop?.id === stop.id ? ("warning" as const) : ("info" as const),
+        index === activeStopIndex ? ("warning" as const) : ("info" as const),
     }));
 
     return [
       {
         id: `${route.id}-depot`,
+        icon: "meal-container" as const,
         label: "Depot",
         latitude: start.currentLat,
         longitude: start.currentLng,
-        tone: "primary",
+        tone: "primary" as const,
       },
       ...stopMarkers,
       {
         id: `${route.id}-driver`,
+        icon: "delivery-van" as const,
         label: route.volunteer.name.split(" ")[0] ?? "Driver",
         latitude: currentPosition.currentLat,
         longitude: currentPosition.currentLng,
-        tone: "success",
+        tone: "success" as const,
       },
     ];
-  }, [currentPosition, currentStop?.id, route]);
+  }, [activeStopIndex, currentPosition, route]);
 
   return (
     <MapCanvas
       centerControlLabel="Center to me"
+      camera={
+        view === "active"
+          ? {
+              bearing: drivingBearing,
+              center: cameraPosition
+                ? {
+                    latitude: cameraPosition.currentLat,
+                    longitude: cameraPosition.currentLng,
+                  }
+                : undefined,
+              duration: driveAnimationTuning.cameraMoveDurationMs,
+              followMarkerId: `${route.id}-driver`,
+              mode: "driver",
+              pitch: 48,
+              zoom: 16.35,
+            }
+          : undefined
+      }
       className={className}
+      markerStyle="icon"
       markers={markers}
+      activePath={activePath}
+      futurePath={futurePath}
       path={route.routeLine}
       showCenterControl
       showNavigationControls={false}
@@ -369,17 +987,20 @@ function RouteOfferSummary({
   route: DriverRouteOption;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-start gap-3">
         <MealfloIcon name="route-road" size={64} />
         <div className="min-w-0 space-y-1">
-          <h1 className="font-display text-ink text-[34px] leading-[1.04] font-bold tracking-[-0.03em]">
+          <h1 className="font-display text-ink text-[31px] leading-[1.04] font-bold tracking-[-0.03em]">
             {route.name}
           </h1>
-          <p className="text-muted text-sm leading-6">{route.area}</p>
         </div>
       </div>
-      <MetricStrip remainingCount={remainingCount} route={route} />
+      <MetricStrip
+        remainingCount={remainingCount}
+        route={route}
+        showRemaining={false}
+      />
     </div>
   );
 }
@@ -387,7 +1008,7 @@ function RouteOfferSummary({
 export function DriverMobileFlow({
   data,
   initialRouteId,
-  initialScreen = "welcome",
+  initialScreen = "availability",
 }: DriverMobileFlowProps) {
   if (data.routeOptions.length === 0) {
     return (
@@ -415,18 +1036,28 @@ export function DriverMobileFlow({
 function DriverMobileFlowReady({
   data,
   initialRouteId,
-  initialScreen = "welcome",
+  initialScreen = "availability",
 }: DriverMobileFlowProps) {
+  const defaultMinutes = data.availabilityOptions.includes(60)
+    ? 60
+    : (data.availabilityOptions[0] ?? 60);
   const initialRoute = useMemo(
     () =>
       data.routeOptions.find((route) => route.id === initialRouteId) ??
+      pickRoute(data.routeOptions, data.availabilityOptions, defaultMinutes) ??
       data.routeOptions.find(
         (route) => route.id === data.suggestedRoute.routeId
       ) ??
       data.routeOptions[0]!,
-    [data.routeOptions, data.suggestedRoute.routeId, initialRouteId]
+    [
+      data.availabilityOptions,
+      data.routeOptions,
+      data.suggestedRoute.routeId,
+      defaultMinutes,
+      initialRouteId,
+    ]
   );
-  const [selectedMinutes, setSelectedMinutes] = useState(60);
+  const [selectedMinutes, setSelectedMinutes] = useState(defaultMinutes);
   const [selectedRouteId, setSelectedRouteId] = useState(initialRoute.id);
   const selectedRoute = useMemo(
     () =>
@@ -435,14 +1066,30 @@ function DriverMobileFlowReady({
     [data.routeOptions, initialRoute, selectedRouteId]
   );
   const [screen, setScreen] = useState<DriverScreen>(initialScreen);
-  const [showAlternates, setShowAlternates] = useState(false);
   const [completedStops, setCompletedStops] = useState<
     Record<string, StopOutcome>
   >({});
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
+  const [activeRoutePath, setActiveRoutePath] = useState<
+    ReadonlyArray<readonly [number, number]> | undefined
+  >();
+  const [cameraPosition, setCameraPosition] = useState<{
+    currentLat: number;
+    currentLng: number;
+  } | null>(null);
+  const [drivingBearing, setDrivingBearing] = useState<number | undefined>();
+  const [directionDistanceMeters, setDirectionDistanceMeters] = useState<
+    number | null
+  >(null);
+  const [directionSegmentIndex, setDirectionSegmentIndex] = useState(0);
+  const [directionStepIndex, setDirectionStepIndex] = useState(0);
   const [currentPosition, setCurrentPosition] = useState(() =>
     getRouteStart(initialRoute.routeLine)
   );
+  const [completionStage, setCompletionStage] =
+    useState<CompletionStage>("idle");
+  const [routeDrivePhase, setRouteDrivePhase] =
+    useState<RouteDrivePhase>("idle");
   const [isCompleting, setIsCompleting] = useState(false);
   const [isStartingSession, setIsStartingSession] = useState(false);
   const [locationMode, setLocationMode] = useState<LocationMode>("idle");
@@ -451,14 +1098,13 @@ function DriverMobileFlowReady({
   const [statusText, setStatusText] = useState(
     "Choose your time window to see the best route."
   );
-  const [isStopSheetOpen, setIsStopSheetOpen] = useState(true);
   const locationModeRef = useRef<LocationMode>("idle");
   const lastLocationRef = useRef(getRouteStart(initialRoute.routeLine));
   const currentStopIndexRef = useRef(currentStopIndex);
   const deliveredCountRef = useRef(countDelivered(completedStops));
   const routeRef = useRef(selectedRoute);
+  const drivingBearingRef = useRef<number | undefined>(undefined);
   const sessionIdRef = useRef<string | null>(null);
-  const demoStepRef = useRef(0);
   const closedSessionIdsRef = useRef<Set<string>>(new Set());
   const liveSessionMountedRef = useRef(false);
 
@@ -474,20 +1120,47 @@ function DriverMobileFlowReady({
   );
   const routeComplete = currentStopIndex >= selectedRoute.stops.length;
   const currentStopPhone = currentStop?.phone ?? selectedRoute.volunteer.phone;
+  const isRouteMotion = routeDrivePhase === "to_stop";
+  const navigationStopIndex = routeComplete
+    ? undefined
+    : isRouteMotion
+      ? directionSegmentIndex
+      : currentStopIndex;
+  const navigationStop =
+    navigationStopIndex !== undefined
+      ? (selectedRoute.stops[navigationStopIndex] ?? null)
+      : null;
   const currentDirection = getCurrentRouteDirection(
     selectedRoute,
-    currentStopIndex
+    directionSegmentIndex,
+    directionStepIndex
   );
-  const locationLabel =
-    locationMode === "gps"
-      ? "GPS live"
-      : locationMode === "blocked"
-        ? "GPS blocked"
-        : locationMode === "demo"
-          ? "Demo location"
-          : locationMode === "asking"
-            ? "Asking"
-            : "Location ready";
+  const actionsHidden =
+    isCompleting || completionStage !== "idle" || isRouteMotion;
+  const currentMapDirection =
+    routeDrivePhase === "collecting"
+      ? {
+          distance: "Pickup",
+          duration: "ready",
+          instruction: "Collect food before the first delivery",
+        }
+      : currentDirection
+        ? {
+            ...currentDirection,
+            distance:
+              directionDistanceMeters !== null
+                ? formatMapDistanceMeters(directionDistanceMeters)
+                : currentDirection.distance,
+          }
+        : null;
+  const bottomSheetTitle =
+    routeDrivePhase === "collecting"
+      ? "Food depot"
+      : (navigationStop?.name ?? currentStop?.name ?? selectedRoute.name);
+  const bottomSheetSubtitle =
+    routeDrivePhase === "collecting"
+      ? "Meals are ready for pickup"
+      : (navigationStop?.address ?? currentStop?.address ?? selectedRoute.area);
 
   useEffect(() => {
     const stored = readStoredProgress(selectedRoute);
@@ -496,7 +1169,6 @@ function DriverMobileFlowReady({
 
     sessionIdRef.current = null;
     lastLocationRef.current = start;
-    demoStepRef.current = 0;
 
     window.queueMicrotask(() => {
       if (cancelled) {
@@ -505,9 +1177,17 @@ function DriverMobileFlowReady({
 
       setCompletedStops(stored.completedStops);
       setCurrentStopIndex(stored.currentStopIndex);
+      setActiveRoutePath(undefined);
+      setCameraPosition(null);
+      drivingBearingRef.current = undefined;
+      setDrivingBearing(undefined);
+      setDirectionDistanceMeters(null);
+      setDirectionSegmentIndex(stored.currentStopIndex);
+      setDirectionStepIndex(0);
       setCurrentPosition(start);
       setSessionId(null);
-      setIsStopSheetOpen(false);
+      setCompletionStage("idle");
+      setRouteDrivePhase("idle");
       setStatusText(
         stored.currentStopIndex >= selectedRoute.stops.length
           ? "This phone has completed the route."
@@ -550,7 +1230,7 @@ function DriverMobileFlowReady({
     if (!("geolocation" in navigator)) {
       setPreferGps(false);
       setLocationMode("demo");
-      setStatusText("GPS is unavailable here. Demo location will keep moving.");
+      setStatusText("GPS is unavailable here. Demo location is ready.");
       return;
     }
 
@@ -570,7 +1250,7 @@ function DriverMobileFlowReady({
       () => {
         setPreferGps(false);
         setLocationMode("blocked");
-        setStatusText("GPS was not allowed. Demo location will keep moving.");
+        setStatusText("GPS was not allowed. Demo location is ready.");
       },
       {
         enableHighAccuracy: true,
@@ -610,7 +1290,6 @@ function DriverMobileFlowReady({
       if (!response.ok || !payload.ok || !payload.data) {
         throw new Error(payload.error ?? "Location update missed.");
       }
-
     },
     []
   );
@@ -774,22 +1453,6 @@ function DriverMobileFlowReady({
     }
 
     const tick = () => {
-      if (locationModeRef.current !== "gps") {
-        const line = routeRef.current.routeLine;
-
-        if (line.length > 0) {
-          demoStepRef.current = (demoStepRef.current + 1) % line.length;
-          const [longitude, latitude] = line[demoStepRef.current]!;
-          const nextLocation = {
-            currentLat: latitude,
-            currentLng: longitude,
-          };
-          lastLocationRef.current = nextLocation;
-          setCurrentPosition(nextLocation);
-          setLocationMode("demo");
-        }
-      }
-
       heartbeat().catch(() => {
         setStatusText("Location update missed. Retrying.");
       });
@@ -808,34 +1471,185 @@ function DriverMobileFlowReady({
   }, [heartbeat, preferGps, sessionId]);
 
   const applyAvailability = (minutes: number) => {
-    const route = pickRoute(data.routeOptions, minutes);
+    const route = pickRoute(
+      data.routeOptions,
+      data.availabilityOptions,
+      minutes
+    );
     setSelectedMinutes(minutes);
     setSelectedRouteId(route.id);
   };
 
-  const chooseAlternateRoute = (route: DriverRouteOption) => {
-    setSelectedRouteId(route.id);
-    setShowAlternates(false);
-  };
-
-  const resetPhoneRouteProgress = () => {
-    const start = getRouteStart(selectedRoute.routeLine);
-
+  const resetPhoneRouteProgress = (
+    start = getRouteStart(selectedRoute.routeLine)
+  ) => {
     currentStopIndexRef.current = 0;
     deliveredCountRef.current = 0;
     lastLocationRef.current = start;
-    demoStepRef.current = 0;
     setCompletedStops({});
     setCurrentStopIndex(0);
+    setActiveRoutePath(undefined);
+    setCameraPosition(null);
+    drivingBearingRef.current = undefined;
+    setDrivingBearing(undefined);
+    setDirectionDistanceMeters(null);
+    setDirectionSegmentIndex(0);
+    setDirectionStepIndex(0);
     setCurrentPosition(start);
+    setCompletionStage("idle");
+    setRouteDrivePhase("idle");
     window.localStorage.removeItem(progressKey(selectedRoute.id));
   };
 
+  const animateCurrentPosition = useCallback(
+    async ({
+      duration,
+      line,
+      segmentDirections = [],
+    }: {
+      duration: number;
+      line: ReadonlyArray<readonly [number, number]>;
+      segmentDirections?: DriverRouteOption["routeDirections"];
+    }) => {
+      await new Promise<void>((resolve) => {
+        const startedAt = performance.now();
+        const lineDistance = getLineDistanceMeters(line);
+        let previousTimestamp = startedAt;
+
+        const tick = (timestamp: number) => {
+          const deltaMs = Math.max(timestamp - previousTimestamp, 16);
+          previousTimestamp = timestamp;
+          const progress = Math.min((timestamp - startedAt) / duration, 1);
+          const { bearing, coordinate, distanceAlongLine } =
+            getLinePointWithBearing(line, progress);
+          const targetBearing = getCameraBearingTarget({
+            coordinate,
+            distanceAlongLine,
+            fallbackBearing: bearing,
+            line,
+            lineDistance,
+          });
+          const nextBearing = smoothBearing({
+            deltaMs,
+            previous: drivingBearingRef.current,
+            target: targetBearing,
+          });
+          const lookaheadProgress =
+            lineDistance > 0
+              ? Math.min(
+                  (distanceAlongLine +
+                    driveAnimationTuning.cameraLookaheadMeters) /
+                    lineDistance,
+                  1
+                )
+              : progress;
+          const { coordinate: cameraCoordinate } = getLinePointWithBearing(
+            line,
+            lookaheadProgress
+          );
+          const directionProgress = getDirectionProgress(
+            segmentDirections,
+            distanceAlongLine
+          );
+          const [longitude, latitude] = coordinate;
+          const [cameraLongitude, cameraLatitude] = cameraCoordinate;
+          const nextLocation = {
+            currentLat: latitude,
+            currentLng: longitude,
+          };
+
+          setActiveRoutePath(
+            getRemainingLineFromDistance({ distanceAlongLine, line })
+          );
+          setCameraPosition({
+            currentLat: cameraLatitude,
+            currentLng: cameraLongitude,
+          });
+          lastLocationRef.current = nextLocation;
+          drivingBearingRef.current = nextBearing;
+          setDrivingBearing(nextBearing);
+          setCurrentPosition(nextLocation);
+          setDirectionStepIndex(directionProgress.stepIndex);
+          setDirectionDistanceMeters(directionProgress.remainingMeters);
+
+          if (progress < 1) {
+            window.requestAnimationFrame(tick);
+            return;
+          }
+
+          resolve();
+        };
+
+        window.requestAnimationFrame(tick);
+      });
+    },
+    []
+  );
+
   const acceptRoute = async () => {
-    resetPhoneRouteProgress();
-    setIsStopSheetOpen(true);
+    const depot = getRouteStart(selectedRoute.routeLine);
+
+    resetPhoneRouteProgress(depot);
+    setRouteDrivePhase("collecting");
     setScreen("active");
     await startSession();
+    setStatusText("Collect food at the depot.");
+    await heartbeat().catch(() => {
+      setStatusText("Collect food at the depot. Location update will retry.");
+    });
+  };
+
+  const continueFromAvailability = async () => {
+    const depot = getRouteStart(selectedRoute.routeLine);
+
+    lastLocationRef.current = depot;
+    setCurrentPosition(depot);
+    setLocationMode("demo");
+    setStatusText("Preparing your route.");
+    setScreen("offer");
+  };
+
+  const collectFood = async () => {
+    const firstStop = selectedRoute.stops[0];
+
+    if (!firstStop) {
+      setRouteDrivePhase("idle");
+      setStatusText("Food collected.");
+      return;
+    }
+
+    const depot = getRouteStart(selectedRoute.routeLine);
+    const firstStopCoordinate = [
+      firstStop.longitude,
+      firstStop.latitude,
+    ] as const;
+    const segmentDirections = selectedRoute.routeDirections.filter(
+      (direction) => direction.segmentIndex === 0
+    );
+    const animationLine = buildRouteLineBetween({
+      from: toRouteCoordinate(depot),
+      route: selectedRoute,
+      to: firstStopCoordinate,
+    });
+
+    setRouteDrivePhase("to_stop");
+    setStatusText("Food collected. Driving to the first stop.");
+    setActiveRoutePath(animationLine);
+    setDirectionSegmentIndex(0);
+    setDirectionStepIndex(0);
+    setDirectionDistanceMeters(segmentDirections[0]?.distanceMeters ?? null);
+    await animateCurrentPosition({
+      duration: getDriveAnimationDurationMs(animationLine),
+      line: animationLine,
+      segmentDirections,
+    });
+    setActiveRoutePath(undefined);
+    setCameraPosition(null);
+    setRouteDrivePhase("idle");
+    setStatusText("Arrived at the first stop.");
+    await heartbeat().catch(() => {
+      setStatusText("Arrived at the first stop. Location update will retry.");
+    });
   };
 
   const completeStop = async (status: StopOutcome) => {
@@ -843,15 +1657,26 @@ function DriverMobileFlowReady({
       return;
     }
 
-    const activeSessionId = sessionIdRef.current ?? (await startSession());
+    const previousCompletedStops = completedStops;
+    const nextCompletedStops = {
+      ...completedStops,
+      [currentStop.id]: status,
+    };
+    const nextStopIndex = currentStopIndex + 1;
+    const nextDeliveredCount = countDelivered(nextCompletedStops);
 
-    if (!activeSessionId) {
-      return;
-    }
-
+    setCompletedStops(nextCompletedStops);
     setIsCompleting(true);
+    setScreen("active");
+    setCompletionStage(status === "delivered" ? "celebrating" : "driving");
 
     try {
+      const activeSessionId = sessionIdRef.current ?? (await startSession());
+
+      if (!activeSessionId) {
+        throw new Error("Route session could not start.");
+      }
+
       const response = await fetch("/api/driver/session/stop-complete", {
         body: JSON.stringify({
           sessionId: activeSessionId,
@@ -872,31 +1697,67 @@ function DriverMobileFlowReady({
         throw new Error(payload.error ?? "Stop update failed.");
       }
 
-      const nextCompletedStops = {
-        ...completedStops,
-        [currentStop.id]: status,
-      };
-      const nextStopIndex = currentStopIndex + 1;
-      const nextDeliveredCount = countDelivered(nextCompletedStops);
-      currentStopIndexRef.current = nextStopIndex;
-      deliveredCountRef.current = nextDeliveredCount;
-      setCompletedStops(nextCompletedStops);
-      setCurrentStopIndex(nextStopIndex);
       setStatusText(
         status === "delivered"
           ? "Delivery marked complete."
           : "Stop marked as could not deliver."
       );
+
+      if (status === "delivered") {
+        await new Promise((resolve) => window.setTimeout(resolve, 1_250));
+      }
+
+      const animationLine = buildDriveAnimationLine({
+        from: currentPosition,
+        route: selectedRoute,
+        stopIndex: currentStopIndex,
+      });
+      const movementSegmentIndex = nextStopIndex;
+      const segmentDirections = selectedRoute.routeDirections.filter(
+        (direction) => direction.segmentIndex === movementSegmentIndex
+      );
+
+      setCompletionStage("driving");
+
+      if (nextStopIndex < selectedRoute.stops.length) {
+        setRouteDrivePhase("to_stop");
+        setActiveRoutePath(animationLine);
+        setDirectionSegmentIndex(movementSegmentIndex);
+        setDirectionStepIndex(0);
+        setDirectionDistanceMeters(
+          segmentDirections[0]?.distanceMeters ?? null
+        );
+        await animateCurrentPosition({
+          duration: getDriveAnimationDurationMs(animationLine),
+          line: animationLine,
+          segmentDirections,
+        });
+        setActiveRoutePath(undefined);
+        setCameraPosition(null);
+        setDirectionStepIndex(Math.max(segmentDirections.length - 1, 0));
+        setDirectionDistanceMeters(0);
+      } else {
+        setActiveRoutePath(undefined);
+        setCameraPosition(null);
+        setDirectionDistanceMeters(null);
+      }
+
+      currentStopIndexRef.current = nextStopIndex;
+      deliveredCountRef.current = nextDeliveredCount;
+      setCurrentStopIndex(nextStopIndex);
       await heartbeat({
         currentStopIndex: nextStopIndex,
         deliveredCountLocal: nextDeliveredCount,
       });
       setScreen("active");
     } catch (error) {
+      setCompletedStops(previousCompletedStops);
       setStatusText(
         error instanceof Error ? error.message : "Stop update failed."
       );
     } finally {
+      setCompletionStage("idle");
+      setRouteDrivePhase("idle");
       setIsCompleting(false);
     }
   };
@@ -934,7 +1795,16 @@ function DriverMobileFlowReady({
       setSessionId(null);
       setCompletedStops({});
       setCurrentStopIndex(0);
+      setActiveRoutePath(undefined);
+      setCameraPosition(null);
+      drivingBearingRef.current = undefined;
+      setDrivingBearing(undefined);
+      setDirectionDistanceMeters(null);
+      setDirectionSegmentIndex(0);
+      setDirectionStepIndex(0);
       setCurrentPosition(getRouteStart(selectedRoute.routeLine));
+      setCompletionStage("idle");
+      setRouteDrivePhase("idle");
       window.localStorage.removeItem(progressKey(selectedRoute.id));
       setScreen("offer");
       setStatusText("Route reset. Accept it to start again.");
@@ -961,6 +1831,14 @@ function DriverMobileFlowReady({
     endSession(sessionIdRef.current);
     sessionIdRef.current = null;
     setSessionId(null);
+    setActiveRoutePath(undefined);
+    setCameraPosition(null);
+    drivingBearingRef.current = undefined;
+    setDrivingBearing(undefined);
+    setDirectionDistanceMeters(null);
+    setDirectionSegmentIndex(0);
+    setDirectionStepIndex(0);
+    setRouteDrivePhase("idle");
     setSelectedRouteId(nextRoute.id);
     setScreen("offer");
     setStatusText(`${nextRoute.volunteer.name} is ready to accept a route.`);
@@ -970,7 +1848,7 @@ function DriverMobileFlowReady({
     if (preferGps || locationMode === "gps" || locationMode === "asking") {
       setPreferGps(false);
       setLocationMode("demo");
-      setStatusText("Fake movement is on for the stage demo.");
+      setStatusText("Demo location is on for the stage demo.");
       return;
     }
 
@@ -1010,229 +1888,121 @@ function DriverMobileFlowReady({
     };
   });
 
-  if (screen === "welcome") {
+  if (screen === "availability") {
     return (
-      <section className="mf-enter flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-        <div className="flex shrink-0 items-start justify-between gap-3 px-1">
-          <h1 className="font-display text-ink text-[38px] leading-[0.98] font-bold tracking-[-0.035em]">
-            Ready for today&apos;s route
-          </h1>
-          <MealfloIcon name="delivery-van" size={56} />
-        </div>
-
-        <div className="flex shrink-0 items-end justify-between gap-3 px-1">
-          <div className="min-w-0">
-            <p className="font-display text-ink text-[20px] leading-tight font-semibold tracking-[-0.02em]">
-              {selectedRoute.area}
+      <section className="mf-enter flex min-h-0 flex-1 flex-col overflow-hidden">
+        <p className="sr-only" role="status">
+          {statusText}
+        </p>
+        <div className="border-line mx-1 mt-3 grid shrink-0 justify-items-center gap-4 rounded-[22px] border-[1.5px] bg-[linear-gradient(180deg,rgba(250,226,120,0.24)_0%,rgba(255,255,255,0)_86%)] px-4 py-7 text-center">
+          <MealfloIcon name="delivery-van" size={104} />
+          <div className="space-y-3">
+            <h1 className="font-display text-ink text-[30px] leading-[1.02] font-bold tracking-[-0.03em]">
+              Welcome to mealflo
+            </h1>
+            <p className="text-muted mx-auto max-w-[31ch] text-[15px] leading-5 font-medium">
+              Delivering food to those who need it most
             </p>
           </div>
-          <span className="text-muted text-sm font-medium">
-            {selectedRoute.stopCount} stops
-          </span>
         </div>
 
-        <RouteMap
-          className="min-h-0 flex-1"
-          currentPosition={currentPosition}
-          currentStop={currentStop}
-          route={selectedRoute}
-        />
+        <div className="min-h-4 flex-1" />
 
-        <div className="grid shrink-0 gap-2">
-          <Button
-            className="text-ink h-11 min-h-11"
-            fullWidth
-            leading={<MealfloIcon name="location-pin" size={24} />}
-            onClick={requestLocation}
-            size="md"
-            variant="secondary"
+        <div className="grid shrink-0 gap-3 px-1">
+          <h2 className="font-display text-ink text-[25px] leading-[1.08] font-semibold tracking-[-0.02em]">
+            How much time do you have?
+          </h2>
+          <div
+            className="grid gap-2.5"
+            role="radiogroup"
+            aria-label="Available time"
           >
-            Use phone location
-          </Button>
+            {data.availabilityOptions.map((minutes) => (
+              <button
+                key={minutes}
+                type="button"
+                aria-checked={selectedMinutes === minutes}
+                role="radio"
+                onClick={() => applyAvailability(minutes)}
+                className={cn(
+                  "border-line hover:border-line-strong flex min-h-[56px] w-full items-center justify-between rounded-[14px] border-[1.5px] bg-white px-4 text-left transition-[transform,background-color,border-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.55)]",
+                  selectedMinutes === minutes &&
+                    "border-[rgba(120,144,250,0.42)] bg-[var(--mf-color-blue-50)]"
+                )}
+              >
+                <span className="font-display text-ink text-[20px] leading-none font-semibold tracking-[-0.01em]">
+                  {formatAvailabilityLabel(minutes)}
+                </span>
+                <span
+                  className={cn(
+                    "border-line flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] bg-white",
+                    selectedMinutes === minutes &&
+                      "border-[var(--mf-color-blue-500)]"
+                  )}
+                  aria-hidden="true"
+                >
+                  <span
+                    className={cn(
+                      "h-2.5 w-2.5 rounded-full bg-transparent",
+                      selectedMinutes === minutes && "bg-action"
+                    )}
+                  />
+                </span>
+              </button>
+            ))}
+          </div>
+
           <Button
-            className="h-11 min-h-11"
+            className="mt-1 mb-5 h-12 min-h-12 shrink-0 text-[15px]"
             fullWidth
-            onClick={() => setScreen("availability")}
+            onClick={() => void continueFromAvailability()}
             size="md"
             variant="primary"
           >
             Continue
           </Button>
-          <p role="status" className="text-muted text-center text-sm leading-6">
-            {statusText}
-          </p>
         </div>
-      </section>
-    );
-  }
-
-  if (screen === "availability") {
-    return (
-      <section className="mf-enter flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-        <div className="space-y-3">
-          <div className="flex items-start gap-3 px-1">
-            <MealfloIcon name="clock" size={54} />
-            <div className="min-w-0 space-y-2">
-              <h1 className="font-display text-ink text-[36px] leading-[1.02] font-bold tracking-[-0.03em]">
-                How much time do you have?
-              </h1>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {data.availabilityOptions.map((minutes) => (
-              <button
-                key={minutes}
-                type="button"
-                onClick={() => applyAvailability(minutes)}
-                className="min-h-[70px] rounded-[18px] text-left transition-transform duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.55)]"
-              >
-                <ChoiceChip
-                  className="font-display h-full w-full justify-center rounded-[18px] text-[21px] font-semibold tracking-[-0.01em]"
-                  selected={selectedMinutes === minutes}
-                >
-                  {formatAvailabilityLabel(minutes)}
-                </ChoiceChip>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <section className="border-line min-h-0 flex-1 space-y-4 overflow-hidden rounded-[18px] border-[1.5px] bg-white/72 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <h2 className="font-display text-ink text-[27px] leading-tight font-semibold tracking-[-0.02em]">
-                {selectedRoute.name}
-              </h2>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 divide-x divide-[rgba(24,24,60,0.1)] rounded-[16px] border-[1.5px] border-[rgba(24,24,60,0.1)] bg-[rgba(240,243,255,0.6)]">
-            <div className="px-3 py-3">
-              <p className="font-display text-ink text-[23px] leading-none font-semibold">
-                {selectedRoute.stopCount}
-              </p>
-              <p className="text-muted mt-1 text-xs font-medium">stops</p>
-            </div>
-            <div className="px-3 py-3">
-              <p className="font-display text-ink text-[23px] leading-none font-semibold">
-                {selectedRoute.totalPlannedTime}
-              </p>
-              <p className="text-muted mt-1 text-xs font-medium">planned</p>
-            </div>
-            <div className="px-3 py-3">
-              <p className="font-display text-ink text-[23px] leading-none font-semibold">
-                {selectedRoute.driveTime}
-              </p>
-              <p className="text-muted mt-1 text-xs font-medium">driving</p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <p className="font-display text-ink text-[20px] font-semibold tracking-[-0.01em]">
-              {selectedRoute.area}
-            </p>
-            <p className="text-muted text-sm leading-6">
-              First stop: {selectedRoute.firstStop}.{" "}
-              {displayDriverLabel(selectedRoute.coldChainNote)}
-            </p>
-          </div>
-        </section>
-
-        <Button
-          fullWidth
-          onClick={() => setScreen("offer")}
-          size="lg"
-          variant="primary"
-        >
-          Start route
-        </Button>
       </section>
     );
   }
 
   if (screen === "offer") {
     return (
-      <section className={phoneScrollScreenClass}>
-        <div className="space-y-5 rounded-[18px] bg-[rgba(240,243,255,0.62)] p-4">
+      <section className="mf-enter flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+        <div className="shrink-0 space-y-3 px-1">
           <RouteOfferSummary
             remainingCount={remainingCount}
             route={selectedRoute}
           />
-          <div className="border-line border-t-[1.5px] pt-4">
-            <p className="text-muted text-sm font-medium">First stop</p>
-            <p className="font-display text-ink mt-1 text-[24px] font-semibold tracking-[-0.02em]">
-              {selectedRoute.firstStop}
-            </p>
-            <p className="text-muted mt-1 text-sm leading-6">
-              {displayDriverLabel(selectedRoute.coldChainNote)}
-            </p>
-          </div>
-          {selectedRoute.routeDirections.length > 0 ? (
-            <div className="border-line flex items-start gap-3 border-t-[1.5px] pt-4">
-              <MealfloIcon name="route-road" size={30} />
-              <div className="min-w-0">
-                <p className="text-muted text-sm font-medium">
-                  First direction
-                </p>
-                <p className="text-ink mt-1 text-base leading-6 font-medium">
-                  {selectedRoute.routeDirections[0]?.instruction}
-                </p>
-              </div>
+        </div>
+
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          <RouteMap
+            className="h-full min-h-0"
+            currentPosition={currentPosition}
+            currentStop={currentStop}
+            route={selectedRoute}
+          />
+          {locationMode === "asking" ? (
+            <div className="absolute inset-x-4 top-4 rounded-[14px] border-[1.5px] border-[rgba(120,144,250,0.24)] bg-white/92 px-4 py-3 backdrop-blur">
+              <p className="text-ink text-sm font-semibold">
+                Finding your starting point
+              </p>
             </div>
           ) : null}
         </div>
 
-        <RouteMap
-          className="h-[300px]"
-          currentPosition={currentPosition}
-          currentStop={currentStop}
-          route={selectedRoute}
-        />
-
-        {showAlternates ? (
-          <div className="grid gap-2">
-            {data.routeOptions.map((route) => (
-              <button
-                key={route.id}
-                type="button"
-                onClick={() => chooseAlternateRoute(route)}
-                className={cn(
-                  "rounded-[16px] border-[1.5px] px-4 py-3 text-left transition-[border-color,background-color,transform] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)]",
-                  selectedRoute.id === route.id
-                    ? "border-[rgba(120,144,250,0.35)] bg-[var(--mf-color-blue-50)]"
-                    : "border-line bg-white"
-                )}
-              >
-                <span className="text-ink block font-medium">{route.name}</span>
-                <span className="text-muted block text-sm leading-6">
-                  {route.stopCount} stops, {route.totalPlannedTime},{" "}
-                  {route.volunteer.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        <div className="mt-auto grid gap-3">
-          <Button
-            fullWidth
-            leading={<MealfloIcon name="checkmark-circle" size={24} />}
-            onClick={acceptRoute}
-            size="lg"
-            variant="primary"
-            disabled={isStartingSession}
-          >
-            Accept route
-          </Button>
-          <Button
-            fullWidth
-            onClick={() => setShowAlternates((value) => !value)}
-            size="lg"
-            variant="secondary"
-          >
-            {showAlternates ? "Hide routes" : "Choose another route"}
-          </Button>
-        </div>
+        <Button
+          className="mb-5 shrink-0"
+          fullWidth
+          leading={<MealfloIcon name="checkmark-circle" size={32} />}
+          onClick={acceptRoute}
+          size="lg"
+          variant="primary"
+          disabled={isStartingSession}
+        >
+          Start Route
+        </Button>
       </section>
     );
   }
@@ -1279,37 +2049,29 @@ function DriverMobileFlowReady({
 
   if (screen === "stop" && currentStop) {
     return (
-      <section className={phoneScrollScreenClass}>
-        <div className="flex items-center justify-between gap-3">
+      <section className="mf-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1 pb-2">
+        <div className="shrink-0">
           <Button
             leading={<MealfloIcon name="route-road" size={22} />}
             onClick={() => setScreen("active")}
             size="md"
             variant="secondary"
           >
-            Map
+            Back to Map
           </Button>
-          <Badge tone={locationMode === "gps" ? "success" : "neutral"}>
-            {locationLabel}
-          </Badge>
         </div>
 
-        <Card className="space-y-5">
-          <div className="space-y-3">
-            <Badge tone="warning">
-              Stop {currentStopIndex + 1} of {selectedRoute.stops.length}
-            </Badge>
-            <div className="space-y-2">
-              <h1 className="font-display text-ink text-[40px] leading-[1] font-bold tracking-[-0.035em]">
-                {currentStop.name}
-              </h1>
-              <p className="text-muted text-[17px] leading-7">
-                {currentStop.address}
-              </p>
-            </div>
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <h1 className="font-display text-ink text-[40px] leading-[1] font-bold tracking-[-0.035em]">
+              {currentStop.name}
+            </h1>
+            <p className="text-muted text-[17px] leading-7">
+              {currentStop.address}
+            </p>
           </div>
 
-          <div className="border-line space-y-2 border-t-[1.5px] pt-4">
+          <section className="border-line space-y-2 border-t-[1.5px] pt-4">
             <div className="flex items-start gap-3">
               <MealfloIcon name="door" size={32} />
               <div>
@@ -1319,9 +2081,9 @@ function DriverMobileFlowReady({
                 </p>
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-3">
+          <section className="space-y-3">
             <div className="flex items-center gap-2">
               <MealfloIcon name="grocery-bag" size={30} />
               <h2 className="font-display text-ink text-[26px] font-semibold tracking-[-0.02em]">
@@ -1332,197 +2094,172 @@ function DriverMobileFlowReady({
               {currentStop.items.map((item) => (
                 <div
                   key={`${currentStop.id}-${item.name}`}
-                  className="border-line rounded-[14px] border-[1.5px] bg-white px-3 py-3"
+                  className="border-line border-t-[1.5px] py-3 first:border-t-0"
                 >
                   <p className="text-ink font-medium">
                     {item.quantity} {item.name}
                   </p>
-                  <p className="text-muted mt-1 text-sm leading-6">
-                    {[...item.dietaryTags, ...item.allergenFlags]
-                      .map((entry) => entry.replace(/_/g, " "))
-                      .join(", ") || "No dietary tags"}
-                  </p>
+                  {item.refrigerated ? (
+                    <p className="text-muted mt-1 text-sm leading-6">
+                      Keep cold until handoff.
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {getStopWarnings(currentStop).map((warning) => (
-              <Badge
-                key={warning}
-                tone={
-                  /allergy|do not|two-person|refrigeration/i.test(warning)
-                    ? "warning"
-                    : "neutral"
-                }
-              >
-                {displayDriverLabel(warning)}
-              </Badge>
-            ))}
-          </div>
+          </section>
 
           {currentStop.originalMessageExcerpt ? (
-            <div className="border-line space-y-2 border-t-[1.5px] pt-4">
+            <section className="border-line space-y-2 border-t-[1.5px] pt-4">
               <p className="text-ink text-sm font-medium">Original note</p>
               <p className="text-muted text-sm leading-6">
                 {displayDriverLabel(currentStop.originalMessageExcerpt)}
               </p>
-            </div>
+            </section>
           ) : null}
-        </Card>
+        </div>
 
-        <div className="border-line sticky bottom-3 grid gap-3 rounded-[20px] border-[1.5px] bg-[rgba(255,253,240,0.94)] p-3 backdrop-blur">
-          <CallButton phone={currentStopPhone} variant="secondary" />
-          <div className="grid grid-cols-2 gap-3">
+        <div className="border-line sticky bottom-0 mt-auto grid gap-2 border-t-[1.5px] bg-[rgba(255,253,240,0.96)] pt-3 pb-[calc(4px+env(safe-area-inset-bottom))] backdrop-blur">
+          <div className="grid grid-cols-2 gap-2">
+            <CallButton
+              className="h-11 min-h-11 text-[15px]"
+              phone={currentStopPhone}
+              variant="secondary"
+            />
             <Button
-              fullWidth
-              onClick={() => completeStop("delivered")}
-              size="lg"
-              variant="primary"
-              disabled={isCompleting || isStartingSession}
-            >
-              Delivered
-            </Button>
-            <Button
+              className="h-11 min-h-11 text-[15px]"
               fullWidth
               onClick={() => completeStop("could_not_deliver")}
-              size="lg"
+              size="md"
               variant="danger"
-              disabled={isCompleting || isStartingSession}
+              disabled={actionsHidden || isStartingSession}
+            >
+              Couldn&apos;t deliver
+            </Button>
+          </div>
+          <Button
+            fullWidth
+            onClick={() => completeStop("delivered")}
+            size="lg"
+            variant="primary"
+            disabled={actionsHidden || isStartingSession}
           >
-            Couldn&apos;t
+            Delivered
           </Button>
         </div>
-      </div>
-    </section>
-  );
+      </section>
+    );
   }
 
   return (
     <section className="mf-enter -mx-3 flex min-h-0 flex-1 overflow-hidden">
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <RouteMap
+          activeRoutePath={activeRoutePath}
+          cameraPosition={cameraPosition}
           className="h-full min-h-0 rounded-none border-0"
           currentPosition={currentPosition}
           currentStop={currentStop}
+          drivingBearing={drivingBearing}
+          navigationStopIndex={navigationStopIndex}
           route={selectedRoute}
+          view="active"
         />
 
-        <div className="absolute top-3 left-3 z-20 flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] border-white/75 bg-white/90 shadow-[0_8px_22px_rgba(24,24,60,0.13)]">
-          <span className="mf-live-dot" aria-hidden="true" />
-          <span className="sr-only">Live on dashboard</span>
-        </div>
+        {currentMapDirection ? (
+          <TurnByTurnDirection direction={currentMapDirection} />
+        ) : null}
 
-        <div className="border-line absolute inset-x-0 bottom-0 z-20 rounded-t-[24px] border-x-0 border-t-[1.5px] bg-white px-3 pt-2 pb-[calc(10px+env(safe-area-inset-bottom))] shadow-[0_-14px_34px_rgba(24,24,60,0.14)] transition-[padding,box-shadow] duration-[var(--mf-duration-slow)] ease-[var(--mf-ease-spring)]">
-          <button
-            type="button"
-            aria-expanded={isStopSheetOpen}
-            className="mx-auto mb-2 flex h-7 w-20 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(120,144,250,0.55)]"
-            onClick={() => setIsStopSheetOpen((value) => !value)}
-          >
-            <span className="bg-line-strong h-1.5 w-12 rounded-full" />
-            <span className="sr-only">
-              {isStopSheetOpen ? "Collapse stop sheet" : "Expand stop sheet"}
-            </span>
-          </button>
-
-          <div className="min-w-0 space-y-1">
-            <h1 className="font-display text-ink truncate text-[27px] leading-[1.02] font-bold tracking-[-0.03em]">
-              {currentStop?.name}
-            </h1>
-            <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-              <div
-                className={cn(
-                  "grid min-w-0 transition-[grid-template-rows,opacity] duration-[var(--mf-duration-slow)] ease-[var(--mf-ease-out)]",
-                  isStopSheetOpen
-                    ? "grid-rows-[1fr] opacity-100"
-                    : "grid-rows-[0fr] opacity-0"
-                )}
-                aria-hidden={!isStopSheetOpen}
-              >
-                <p className="text-muted min-h-0 overflow-hidden truncate text-sm leading-5">
-                  {currentStop?.address}
-                </p>
-              </div>
-              <Badge tone="warning">
-                Stop {currentStopIndex + 1} of {selectedRoute.stops.length}
-              </Badge>
+        {completionStage === "celebrating" ? (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-[rgba(255,253,240,0.18)]">
+            <div className="mf-driver-check flex h-32 w-32 items-center justify-center rounded-full border-[1.5px] border-[rgba(78,173,111,0.26)] bg-white/92 shadow-[0_18px_54px_rgba(24,24,60,0.18)]">
+              <MealfloIcon name="checkmark-circle" size={88} />
             </div>
           </div>
+        ) : null}
 
-          <div
-            className={cn(
-              "grid transition-[grid-template-rows,opacity] duration-[var(--mf-duration-slow)] ease-[var(--mf-ease-spring)]",
-              isStopSheetOpen
-                ? "grid-rows-[1fr] opacity-100"
-                : "grid-rows-[0fr] opacity-0"
-            )}
-            aria-hidden={!isStopSheetOpen}
-          >
-            <div className="min-h-0 overflow-hidden">
-              {currentDirection ? (
-                <div className="mt-3 flex items-start gap-3 rounded-[14px] border-[1.5px] border-[rgba(120,144,250,0.22)] bg-[rgba(240,243,255,0.7)] px-3 py-2.5">
-                  <MealfloIcon name="route-road" size={28} />
-                  <div className="min-w-0">
-                    <p className="text-muted text-xs leading-4 font-medium">
-                      Next direction · {currentDirection.distance}
-                    </p>
-                    <p className="text-ink mt-0.5 line-clamp-2 text-sm leading-5 font-medium">
-                      {currentDirection.instruction}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="mt-3">
-                <ProgressDots
-                  completedStops={completedStops}
-                  currentStopIndex={currentStopIndex}
-                  stops={selectedRoute.stops}
-                />
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <CallButton
-                  className="h-12 min-h-12 text-base"
-                  phone={currentStopPhone}
-                  variant="secondary"
-                />
-                <Button
-                  className="h-12 min-h-12 text-base"
-                  fullWidth
-                  onClick={() => setScreen("stop")}
-                  size="md"
-                  variant="primary"
-                >
-                  Details
-                </Button>
-              </div>
-
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <Button
-                  className="h-12 min-h-12 text-base"
-                  fullWidth
-                  onClick={() => completeStop("delivered")}
-                  size="md"
-                  variant="warm"
-                  disabled={isCompleting || isStartingSession}
-                >
-                  Delivered
-                </Button>
-                <Button
-                  className="h-12 min-h-12 text-base"
-                  fullWidth
-                  onClick={() => completeStop("could_not_deliver")}
-                  size="md"
-                  variant="danger"
-                  disabled={isCompleting || isStartingSession}
-                >
-                  Couldn&apos;t deliver
-                </Button>
-              </div>
+        <div className="border-line absolute inset-x-0 bottom-0 z-20 rounded-t-[22px] border-x-0 border-t-[1.5px] bg-white px-4 pt-4 pb-[calc(12px+env(safe-area-inset-bottom))] shadow-[0_-14px_34px_rgba(24,24,60,0.14)]">
+          <div className="min-w-0 space-y-3">
+            <div className="space-y-1">
+              <h1 className="font-display text-ink truncate text-[28px] leading-[1.02] font-bold tracking-[-0.03em]">
+                {bottomSheetTitle}
+              </h1>
+              <p className="text-muted truncate text-sm leading-5">
+                {bottomSheetSubtitle}
+              </p>
             </div>
+
+            <ProgressDots
+              completedStops={completedStops}
+              currentStopIndex={navigationStopIndex ?? currentStopIndex}
+              isMoving={isRouteMotion}
+              stops={selectedRoute.stops}
+            />
+
+            {routeDrivePhase === "collecting" ? (
+              <Button
+                className="h-[56px] min-h-[56px] text-base"
+                fullWidth
+                leading={<MealfloIcon name="meal-container" size={30} />}
+                onClick={() => void collectFood()}
+                size="lg"
+                variant="primary"
+                disabled={isStartingSession}
+              >
+                Collect food
+              </Button>
+            ) : actionsHidden ? (
+              <div className="mf-control-feedback border-line rounded-[14px] border-[1.5px] bg-[rgba(240,243,255,0.64)] px-4 py-3">
+                <p className="text-ink text-sm font-semibold">
+                  {routeDrivePhase === "to_stop"
+                    ? "Driving to the next stop"
+                    : completionStage === "celebrating"
+                      ? "Delivered"
+                      : "Moving to the next stop"}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    className="h-[54px] min-h-[54px] text-base"
+                    fullWidth
+                    onClick={() => setScreen("stop")}
+                    size="lg"
+                    variant="primary"
+                  >
+                    Details
+                  </Button>
+                  <Button
+                    className="h-[54px] min-h-[54px] text-base"
+                    fullWidth
+                    onClick={() => completeStop("delivered")}
+                    size="lg"
+                    variant="warm"
+                    disabled={isStartingSession}
+                  >
+                    Delivered
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <CallButton
+                    className="h-11 min-h-11 text-[15px]"
+                    phone={currentStopPhone}
+                    variant="secondary"
+                  />
+                  <Button
+                    className="h-11 min-h-11 text-[15px]"
+                    fullWidth
+                    onClick={() => completeStop("could_not_deliver")}
+                    size="md"
+                    variant="danger"
+                    disabled={isStartingSession}
+                  >
+                    Couldn&apos;t deliver
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -119,6 +119,7 @@ export type DriverRouteStop = {
 
 export type DriverRouteDirection = {
   distance: string;
+  distanceMeters: number;
   duration: string;
   instruction: string;
   sequence: number;
@@ -129,6 +130,11 @@ export type DriverRouteOption = {
   area: string;
   coldChainNote: string;
   deliveredCount: number;
+  depot: {
+    latitude: number;
+    longitude: number;
+    name: string;
+  } | null;
   driveTime: string;
   eta: string;
   firstStop: string;
@@ -218,27 +224,19 @@ export type RouteGenerationSummary = {
 export type InboxQueueItem = {
   address: string;
   channel: "form" | "gmail";
-  confidence: string;
   draftType: "other" | "request" | "volunteer";
   id: string;
   sender: string;
   snippet: string;
-  status: "low confidence" | "needs review";
   subject: string;
-};
-
-export type InboxFieldSummary = {
-  confidence: "high" | "low" | "medium";
-  label: string;
-  name: string;
-  value: string;
 };
 
 export type AdminDirectoryRow = {
   id: string;
   location: string;
+  measure: string;
   name: string;
-  note: string;
+  notes: string;
   role: "client" | "driver";
   status: string;
 };
@@ -260,7 +258,6 @@ export type AdminDashboardData = {
 
 export type AdminInboxData = {
   directoryRows: AdminDirectoryRow[];
-  inboxFields: InboxFieldSummary[];
   inboxItems: InboxQueueItem[];
   selectedItem: {
     accessNotes: string;
@@ -270,9 +267,7 @@ export type AdminInboxData = {
     draftType: "other" | "request" | "volunteer";
     dietaryFlags: string;
     householdSize: string;
-    lowConfidenceFields: string[];
     needBy: string;
-    parserConfidence: string;
     rawParagraphs: string[];
     receivedLabel: string;
     sender: string;
@@ -291,6 +286,7 @@ export type AdminRoutesData = {
   liveMarkers: LiveMarker[];
   requestBuckets: Record<TriageBucket, TriageRequestCard[]>;
   routeLine: ReadonlyArray<readonly [number, number]>;
+  routeOptions: DriverRouteOption[];
   routePlans: RoutePlanCard[];
   routeSummaries: RouteSummaryCard[];
   selectedRoute: {
@@ -593,6 +589,7 @@ function formatRouteDirections(route: ResolvedRoute) {
       sequence: index + 1,
       instruction: step.instruction,
       distance: formatDistanceMeters(step.distanceMeters),
+      distanceMeters: step.distanceMeters,
       duration: formatRelativeSeconds(step.durationSeconds),
       segmentIndex,
     })) satisfies DriverRouteDirection[];
@@ -641,8 +638,8 @@ function buildVolunteerRawBody(input: z.infer<typeof volunteerIntakeSchema>) {
     `Starting area: ${input.homeArea}, ${input.homeMunicipality}`,
     `Availability: ${input.minutesAvailable} minutes, ${input.windowStart}-${input.windowEnd}`,
     `Vehicle access: ${input.hasVehicleAccess ? "Yes" : "No"}`,
-    input.canHandleColdChain ? "Can bring a cooler when needed" : null,
-    input.canClimbStairs ? "Can climb stairs" : null,
+    `Can bring a cooler: ${input.canHandleColdChain ? "Yes" : "No"}`,
+    `Stairs: ${input.canClimbStairs ? "Comfortable" : "Avoid stairs"}`,
     `Message: ${input.message}`,
   ]
     .filter(Boolean)
@@ -687,17 +684,6 @@ function slugify(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function toQueueStatus(
-  confidenceScore: number,
-  lowConfidenceFields: string[]
-): InboxQueueItem["status"] {
-  if (confidenceScore < 85 || lowConfidenceFields.length > 0) {
-    return "low confidence";
-  }
-
-  return "needs review";
 }
 
 function toRouteStatus(
@@ -1199,6 +1185,9 @@ async function buildDriverRouteOptions(
     orderedRoutes.map(async (route) => {
       const volunteer = volunteerById.get(route.volunteerId);
       const vehicle = vehicleById.get(route.vehicleId);
+      const depot = graph.depotRows.find(
+        (entry) => entry.id === route.startDepotId
+      );
       const stops = buildDriverRouteStopDetails(route.id, graph);
       const resolvedRoute = await buildResolvedRoute(
         route.id,
@@ -1214,6 +1203,13 @@ async function buildDriverRouteOptions(
         stopCount: route.stopCount,
         deliveredCount: route.deliveredCount,
         remainingCount: route.remainingCount,
+        depot: depot
+          ? {
+              latitude: depot.latitude,
+              longitude: depot.longitude,
+              name: depot.name,
+            }
+          : null,
         eta: formatRelativeMinutes(route.plannedTotalMinutes),
         driveTime: formatRelativeMinutes(route.plannedDriveMinutes),
         totalPlannedTime: formatRelativeMinutes(route.plannedTotalMinutes),
@@ -3020,13 +3016,6 @@ export async function getAdminInboxData(
     requestPayload?.success === true ? requestPayload.data : null;
   const parsedVolunteer =
     volunteerPayload?.success === true ? volunteerPayload.data : null;
-  const lowConfidenceFields = selectedDraft?.lowConfidenceFields ?? [];
-  const fieldConfidence = (name: string): InboxFieldSummary["confidence"] =>
-    lowConfidenceFields.includes(name)
-      ? "low"
-      : selectedDraft && selectedDraft.confidenceScore >= 90
-        ? "high"
-        : "medium";
   const latestRequestByClient = new Map<
     string,
     typeof deliveryRequests.$inferSelect
@@ -3065,20 +3054,24 @@ export async function getAdminInboxData(
     directoryRows: [
       ...graph.clientRows.map((client) => {
         const request = latestRequestByClient.get(client.id);
+        const mealCount =
+          request?.approvedMealCount ??
+          request?.requestedMealCount ??
+          client.householdSize;
+        const notes = [
+          ...client.dietaryTags.map((tag) => sentenceCaseList([tag])),
+          ...client.allergenFlags.map(
+            (flag) => `${sentenceCaseList([flag])} allergy`
+          ),
+          client.accessNotes,
+        ].filter(Boolean);
 
         return {
           id: client.id,
           location: `${client.addressLine1}, ${client.municipality}`,
+          measure: `${mealCount} ${mealCount === 1 ? "meal" : "meals"}`,
           name: compactName(client.firstName, client.lastName),
-          note: [
-            `${client.householdSize} household`,
-            client.dietaryTags[0]?.replace(/_/g, " "),
-            client.allergenFlags[0]
-              ? `${client.allergenFlags[0].replace(/_/g, " ")} allergy`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(", "),
+          notes: notes.join(", "),
           role: "client" as const,
           status: request
             ? (requestStatusLabels[
@@ -3091,18 +3084,22 @@ export async function getAdminInboxData(
       }),
       ...graph.volunteerRows.map((volunteer) => {
         const availability = activeAvailabilityByVolunteer.get(volunteer.id);
+        const notes = [
+          volunteer.hasVehicleAccess ? "Has vehicle" : "Pair with driver",
+          volunteer.canHandleColdChain ? "Can carry cooler" : null,
+          volunteer.canHandleWheelchair ? "Lift support" : null,
+        ].filter(Boolean);
 
         return {
           id: volunteer.id,
           location: `${volunteer.homeArea}, ${volunteer.homeMunicipality}`,
+          measure: availability
+            ? `${formatRelativeMinutes(availability.minutesAvailable)}, ${availability.windowStart}-${availability.windowEnd}`
+            : volunteer.active
+              ? "Open"
+              : "Inactive",
           name: compactName(volunteer.firstName, volunteer.lastName),
-          note: [
-            volunteer.hasVehicleAccess ? "Has vehicle" : "Pair with driver",
-            volunteer.canHandleColdChain ? "Can carry cooler" : null,
-            volunteer.canHandleWheelchair ? "Lift support" : null,
-          ]
-            .filter(Boolean)
-            .join(", "),
+          notes: notes.join(", "),
           role: "driver" as const,
           status: availability
             ? `${formatRelativeMinutes(availability.minutesAvailable)} available`
@@ -3116,73 +3113,6 @@ export async function getAdminInboxData(
         left.role.localeCompare(right.role) ||
         left.name.localeCompare(right.name)
     ),
-    inboxFields: parsedRequest
-      ? [
-          {
-            label: "Need by",
-            name: "dueBucket",
-            value: parsedRequest.dueBucket,
-            confidence: fieldConfidence("dueBucket"),
-          },
-          {
-            label: "Household size",
-            name: "householdSize",
-            value: String(parsedRequest.householdSize),
-            confidence: fieldConfidence("householdSize"),
-          },
-          {
-            label: "Dietary flags",
-            name: "dietaryTags",
-            value: sentenceCaseList([
-              ...parsedRequest.dietaryTags,
-              ...parsedRequest.allergenFlags,
-            ]),
-            confidence: fieldConfidence("dietaryTags"),
-          },
-          {
-            label: "Access notes",
-            name: "message",
-            value: parsedRequest.message,
-            confidence: fieldConfidence("message"),
-          },
-        ]
-      : parsedVolunteer
-        ? [
-            {
-              label: "Availability",
-              name: "minutesAvailable",
-              value: `${parsedVolunteer.minutesAvailable} minutes`,
-              confidence: fieldConfidence("minutesAvailable"),
-            },
-            {
-              label: "Starting area",
-              name: "homeArea",
-              value: `${parsedVolunteer.homeArea}, ${parsedVolunteer.homeMunicipality}`,
-              confidence: fieldConfidence("homeArea"),
-            },
-            {
-              label: "Vehicle access",
-              name: "hasVehicleAccess",
-              value: parsedVolunteer.hasVehicleAccess ? "Yes" : "No",
-              confidence: fieldConfidence("hasVehicleAccess"),
-            },
-            {
-              label: "Route notes",
-              name: "message",
-              value: parsedVolunteer.message,
-              confidence: fieldConfidence("message"),
-            },
-          ]
-        : selectedDraft
-          ? [
-              {
-                label: "Draft type",
-                name: "draftType",
-                value: selectedDraft.draftType,
-                confidence: "low",
-              },
-            ]
-          : [],
     inboxItems: queue.map((draft) => {
       const intake = graph.intakeRows.find(
         (entry) => entry.id === draft.intakeMessageId
@@ -3201,6 +3131,22 @@ export async function getAdminInboxData(
           : queueVolunteerPayload?.success === true
             ? `${queueVolunteerPayload.data.homeArea}, ${queueVolunteerPayload.data.homeMunicipality}`
             : (intake?.rawAddress ?? "Address pending");
+      const displayName =
+        queueRequestPayload?.success === true
+          ? [
+              queueRequestPayload.data.firstName,
+              queueRequestPayload.data.lastName,
+            ]
+              .filter(Boolean)
+              .join(" ")
+          : queueVolunteerPayload?.success === true
+            ? [
+                queueVolunteerPayload.data.firstName,
+                queueVolunteerPayload.data.lastName,
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : (intake?.senderName ?? "Unknown sender");
 
       return {
         id: draft.id,
@@ -3210,9 +3156,7 @@ export async function getAdminInboxData(
             ? draft.draftType
             : "other",
         subject: intake?.subject ?? draft.summary,
-        sender: intake?.senderName ?? "Unknown sender",
-        status: toQueueStatus(draft.confidenceScore, draft.lowConfidenceFields),
-        confidence: `${draft.confidenceScore}%`,
+        sender: displayName || intake?.senderName || "Unknown sender",
         address,
         snippet: intake?.rawBody.slice(0, 90) ?? "",
       } satisfies InboxQueueItem;
@@ -3224,7 +3168,15 @@ export async function getAdminInboxData(
         selectedDraft?.draftType === "volunteer"
           ? selectedDraft.draftType
           : "other",
-      sender: selectedIntake?.senderName ?? "Unknown sender",
+      sender: parsedRequest
+        ? [parsedRequest.firstName, parsedRequest.lastName]
+            .filter(Boolean)
+            .join(" ")
+        : parsedVolunteer
+          ? [parsedVolunteer.firstName, parsedVolunteer.lastName]
+              .filter(Boolean)
+              .join(" ")
+          : (selectedIntake?.senderName ?? "Unknown sender"),
       receivedLabel: formatTime(selectedIntake?.receivedAt),
       address:
         parsedRequest?.addressLine1 && parsedRequest?.municipality
@@ -3241,11 +3193,10 @@ export async function getAdminInboxData(
             "Reply channel pending"),
       rawParagraphs: selectedIntake?.rawBody
         ? selectedIntake.rawBody
-            .split(/\n|\. /)
+            .split(/\n{2,}/)
             .map((entry) => entry.trim())
             .filter(Boolean)
         : [],
-      parserConfidence: `${selectedDraft?.confidenceScore ?? 0}%`,
       needBy: parsedRequest?.dueBucket ?? "today",
       householdSize: String(parsedRequest?.householdSize ?? 1),
       dietaryFlags: sentenceCaseList([
@@ -3257,7 +3208,6 @@ export async function getAdminInboxData(
         parsedVolunteer?.message ??
         selectedIntake?.rawBody ??
         "Notes pending review.",
-      lowConfidenceFields,
       sourceChannel: selectedIntake?.channel === "gmail" ? "gmail" : "form",
       structuredPayload: selectedDraft?.structuredPayload ?? {},
       subject: selectedIntake?.subject ?? selectedDraft?.summary ?? "No intake",
@@ -3276,6 +3226,7 @@ export async function getAdminRoutesData(): Promise<AdminRoutesData> {
   const graph = await loadDemoGraph();
   const routeSummaries = buildRouteSummaries(graph);
   const selectedRoute = routeSummaries[0];
+  const routeOptions = await buildDriverRouteOptions(graph);
 
   return {
     driverCapacity: buildDriverCapacity(graph),
@@ -3297,6 +3248,7 @@ export async function getAdminRoutesData(): Promise<AdminRoutesData> {
       graph.routeRows,
       graph.stopRows
     ),
+    routeOptions,
     routePlans: buildRoutePlans(graph),
     routeSummaries,
     selectedRoute: {

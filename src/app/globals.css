@@ -211,6 +211,32 @@ textarea {
   appearance: none;
 }
 
+.mealflo-field-control {
+  color: #000000;
+  color-scheme: light;
+  caret-color: var(--mf-color-blue-500);
+  -webkit-text-fill-color: #000000;
+}
+
+.mealflo-field-control::placeholder {
+  color: #000000;
+  opacity: 0.55;
+  -webkit-text-fill-color: rgba(0, 0, 0, 0.55);
+}
+
+.mealflo-field-control option {
+  background: var(--mf-color-surface);
+  color: #000000;
+}
+
+.mealflo-field-control:-webkit-autofill,
+.mealflo-field-control:-webkit-autofill:hover,
+.mealflo-field-control:-webkit-autofill:focus {
+  border-color: var(--mf-color-border-focus);
+  box-shadow: 0 0 0 1000px var(--mf-color-surface) inset;
+  -webkit-text-fill-color: #000000;
+}
+
 textarea {
   resize: vertical;
 }
@@ -309,6 +335,20 @@ textarea {
   animation: mf-control-feedback var(--mf-duration-base) var(--mf-ease-out) both;
 }
 
+.mf-driver-check {
+  animation: mf-driver-check 1100ms var(--mf-ease-spring) both;
+}
+
+.mf-direction-slide-in {
+  animation: mf-direction-slide-in var(--mf-duration-slow) var(--mf-ease-spring)
+    both;
+}
+
+.mf-direction-slide-out {
+  animation: mf-direction-slide-out var(--mf-duration-slow) var(--mf-ease-out)
+    both;
+}
+
 .mf-live-dot {
   position: relative;
   display: inline-flex;
@@ -327,6 +367,10 @@ textarea {
   animation: mf-live-pulse 2.4s var(--mf-ease-out) infinite;
 }
 
+.mf-route-progress-pulse {
+  animation: mf-route-progress-pulse 1.45s var(--mf-ease-out) infinite;
+}
+
 @keyframes mf-enter {
   from {
     opacity: 0;
@@ -336,6 +380,19 @@ textarea {
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes mf-route-progress-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(61, 92, 245, 0);
+    opacity: 0.82;
+  }
+
+  50% {
+    box-shadow: 0 0 0 5px rgba(61, 92, 245, 0.15);
+    opacity: 1;
   }
 }
 
@@ -361,6 +418,47 @@ textarea {
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes mf-driver-check {
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translate3d(0, 10px, 0);
+  }
+
+  45% {
+    opacity: 1;
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.04) translate3d(0, -8px, 0);
+  }
+}
+
+@keyframes mf-direction-slide-in {
+  from {
+    opacity: 0;
+    transform: translate3d(34px, 0, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes mf-direction-slide-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(-34px, 0, 0);
   }
 }
 

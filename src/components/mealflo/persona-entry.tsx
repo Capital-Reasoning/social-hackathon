@@ -63,16 +63,21 @@ export function PersonaEntry({ integrations }: PersonaEntryProps) {
         </span>
         <section className="grid flex-1 content-center items-start gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(480px,0.82fr)]">
           <div className="flex h-full items-center justify-start pt-10 sm:pt-12 lg:pt-0">
-            <MealfloLogo
-              iconSize={136}
-              iconClassName="!size-[92px] sm:!size-[136px]"
-              className="max-w-full flex-col items-start gap-0 text-left sm:gap-1"
-              showIcon={false}
-              showSubtitle={false}
-              swatchClassName="!size-[92px] sm:!size-[136px]"
-              swatchSize={136}
-              textClassName="text-[2.35rem] leading-[0.86] sm:text-[clamp(3.9rem,7.7vw,7.85rem)]"
-            />
+            <div className="max-w-full text-left">
+              <p className="font-display text-muted mb-2 text-[1.25rem] leading-none font-semibold sm:mb-3 sm:text-[clamp(1.55rem,2.25vw,2.5rem)]">
+                Welcome to
+              </p>
+              <MealfloLogo
+                iconSize={136}
+                iconClassName="!size-[92px] sm:!size-[136px]"
+                className="max-w-full flex-col items-start gap-0 text-left sm:gap-1"
+                showIcon={false}
+                showSubtitle={false}
+                swatchClassName="!size-[92px] sm:!size-[136px]"
+                swatchSize={136}
+                textClassName="text-[2.35rem] leading-[0.86] sm:text-[clamp(3.9rem,7.7vw,7.85rem)]"
+              />
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">

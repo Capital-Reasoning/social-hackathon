@@ -93,9 +93,9 @@ export function PublicFrame({
 
 export function PublicLandingView() {
   return (
-    <div className="flex w-full flex-1 flex-col lg:min-h-full lg:justify-center">
-      <section className="mf-enter rounded-[24px] bg-[linear-gradient(180deg,rgba(250,226,120,0.24)_0%,rgba(255,255,255,0)_86%)] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,0.72fr)_minmax(720px,1.28fr)] xl:items-center">
+    <div className="flex w-full flex-1 flex-col lg:min-h-full">
+      <section className="mf-enter flex min-h-full flex-1 items-center rounded-[24px] bg-[linear-gradient(180deg,rgba(250,226,120,0.24)_0%,rgba(255,255,255,0)_86%)] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="grid w-full gap-8 xl:grid-cols-[minmax(0,0.72fr)_minmax(720px,1.28fr)] xl:items-center">
           <div className="space-y-6">
             <div className="space-y-4">
               <div className="space-y-3">

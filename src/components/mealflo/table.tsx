@@ -10,7 +10,7 @@ export function Table({
     <div className="border-line overflow-hidden rounded-[16px] border-[1.5px] bg-white">
       <div className="overflow-x-auto">
         <table
-          className={cn("min-w-full border-collapse", className)}
+          className={cn("w-full min-w-full border-collapse", className)}
           {...props}
         />
       </div>

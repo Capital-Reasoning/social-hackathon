@@ -47,7 +47,7 @@ type BaseInputProps = {
 };
 
 const baseFieldClasses =
-  "min-h-[52px] w-full rounded-[12px] border-[1.5px] border-line bg-white px-4 text-base text-[var(--mf-color-ink)] transition-[transform,border-color,background-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] placeholder:text-subtle hover:border-line-strong focus:border-[rgba(120,144,250,0.45)] focus:bg-white";
+  "mealflo-field-control min-h-[52px] w-full rounded-[12px] border-[1.5px] border-line bg-white px-4 text-base text-black transition-[transform,border-color,background-color] duration-[var(--mf-duration-base)] ease-[var(--mf-ease-spring)] placeholder:text-black/55 hover:border-line-strong focus:border-[rgba(120,144,250,0.45)] focus:bg-white";
 
 export function Input({
   className,

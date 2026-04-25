@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 
 type LogoProps = {
   className?: string;
+  contextLabel?: string;
+  contextLabelClassName?: string;
   href?: ComponentProps<typeof Link>["href"];
   iconClassName?: string;
   iconSize?: number;
@@ -20,6 +22,8 @@ type LogoProps = {
 
 export function MealfloLogo({
   className,
+  contextLabel,
+  contextLabelClassName,
   href = "/",
   iconClassName,
   iconSize = 34,
@@ -60,6 +64,19 @@ export function MealfloLogo({
           )}
         >
           mealflo
+          {contextLabel ? (
+            <>
+              {" "}
+              <span
+                className={cn(
+                  "ml-2 font-normal text-current opacity-68",
+                  contextLabelClassName
+                )}
+              >
+                {contextLabel}
+              </span>
+            </>
+          ) : null}
         </p>
         {showSubtitle ? (
           <p className={cn("text-sm", light ? "text-white/70" : "text-muted")}>

@@ -1,17 +1,11 @@
 import { Badge } from "@/components/mealflo/badge";
 import { AdminDirectoryTable } from "@/components/mealflo/admin-directory-table";
-import { AdminInboxRowActions } from "@/components/mealflo/admin-inbox-row-actions";
-import { AdminInboxReview } from "@/components/mealflo/admin-inbox-review";
+import { AdminInboxWorkbench } from "@/components/mealflo/admin-inbox-workbench";
 import { AdminInventoryWorkflows } from "@/components/mealflo/admin-inventory-workflows";
-import { AdminRouteActions } from "@/components/mealflo/admin-route-actions";
+import { TodayRouteList } from "@/components/mealflo/admin-today-routes";
 import { ButtonLink } from "@/components/mealflo/button";
 import { Card } from "@/components/mealflo/card";
-import {
-  PageFrame,
-  PageHeader,
-  StatusPill,
-  TopBar,
-} from "@/components/mealflo/layout";
+import { PageFrame, PageHeader, TopBar } from "@/components/mealflo/layout";
 import { MapCanvas } from "@/components/mealflo/map-canvas";
 import {
   Table,
@@ -26,10 +20,8 @@ import {
   getAdminInboxData,
   getAdminInventoryData,
   getAdminRoutesData,
-  type DriverCapacityCard,
-  type InboxQueueItem,
-  type RoutePlanCard,
-  type RouteSummaryCard,
+  ensureSeededData,
+  type LiveMarker,
   type TriageBucket,
   type TriageRequestCard,
 } from "@/server/mealflo/backend";
@@ -56,18 +48,6 @@ const adminNav = [
   key: AdminNavKey;
   label: string;
 }[];
-
-const routeStatusConfig = {
-  attention: { label: "Needs attention", tone: "warning" as const },
-  "on-track": { label: "On track", tone: "success" as const },
-  ready: { label: "Ready to assign", tone: "info" as const },
-};
-
-function RouteStatusBadge({ status }: { status: RouteSummaryCard["status"] }) {
-  const config = routeStatusConfig[status];
-
-  return <Badge tone={config.tone}>{config.label}</Badge>;
-}
 
 function requestStatusTone(status: TriageRequestCard["status"]) {
   if (status === "held") {
@@ -112,6 +92,33 @@ function urgencyTone(value: number) {
   }
 
   return "border-[rgba(24,24,60,0.12)] bg-[rgba(255,255,255,0.76)] text-muted";
+}
+
+function requestMarkerTone(request: TriageRequestCard): LiveMarker["tone"] {
+  if (request.status === "delivered") {
+    return "success";
+  }
+
+  if (request.status === "held" || urgencyValue(request.urgency) >= 8) {
+    return "warning";
+  }
+
+  return "info";
+}
+
+function todayDeliveryMarkers(
+  requests: readonly TriageRequestCard[],
+  driverMarkers: readonly LiveMarker[]
+): LiveMarker[] {
+  const requestMarkers = requests.map((request) => ({
+    id: `today-${request.id}`,
+    label: request.clientName,
+    latitude: request.latitude,
+    longitude: request.longitude,
+    tone: requestMarkerTone(request),
+  }));
+
+  return [...requestMarkers, ...driverMarkers];
 }
 
 function formatAdminMinutes(value: number) {
@@ -166,13 +173,12 @@ function ReadyRequestsTable({
 
   return (
     <div className="min-w-0 overflow-hidden">
-      <table className="w-full min-w-[520px] border-collapse text-left">
+      <table className="w-full min-w-[440px] border-collapse text-left">
         <thead>
           <tr className="border-line text-muted border-b-[1.5px] text-xs font-semibold tracking-[0.08em] uppercase">
-            <th className="py-2.5 pr-3">Neighbor</th>
+            <th className="py-2.5 pr-3">Client</th>
             <th className="py-2.5 pr-3">Urgency</th>
             <th className="py-2.5 pr-3 text-right">Meals</th>
-            <th className="py-2.5 pr-0">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -180,32 +186,27 @@ function ReadyRequestsTable({
             const urgency = urgencyValue(request.urgency);
 
             return (
-            <tr
-              key={request.id}
-              className="border-line/70 border-b last:border-b-0"
-            >
-              <td className="py-2.5 pr-3">
-                <p className="text-ink font-medium">{request.clientName}</p>
-                <p className="text-muted mt-0.5 truncate text-sm leading-5">
-                  {request.address}
-                </p>
-              </td>
-              <td className="py-2.5 pr-3">
-                <span
-                  className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full border-[1.5px] px-2 text-sm font-semibold ${urgencyTone(urgency)}`}
-                >
-                  {urgency}
-                </span>
-              </td>
-              <td className="text-ink py-2.5 pr-3 text-right font-medium">
-                {request.mealCount}
-              </td>
-              <td className="py-2.5 pr-0">
-                <Badge size="sm" tone={requestStatusTone(request.status)}>
-                  {request.statusLabel}
-                </Badge>
-              </td>
-            </tr>
+              <tr
+                key={request.id}
+                className="border-line/70 border-b last:border-b-0"
+              >
+                <td className="py-2.5 pr-3">
+                  <p className="text-ink font-medium">{request.clientName}</p>
+                  <p className="text-muted mt-0.5 truncate text-sm leading-5">
+                    {request.address}
+                  </p>
+                </td>
+                <td className="py-2.5 pr-3">
+                  <span
+                    className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full border-[1.5px] px-2 text-sm font-semibold ${urgencyTone(urgency)}`}
+                  >
+                    {urgency}
+                  </span>
+                </td>
+                <td className="text-ink py-2.5 pr-3 text-right font-medium">
+                  {request.mealCount}
+                </td>
+              </tr>
             );
           })}
         </tbody>
@@ -216,24 +217,40 @@ function ReadyRequestsTable({
 
 function DashboardSectionHeader({
   action,
+  actionPlacement = "end",
   note,
   title,
 }: {
   action?: React.ReactNode;
+  actionPlacement?: "end" | "inline";
   note?: string;
   title: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
       <div className="space-y-1">
-        <h2 className="font-display text-ink text-[28px] font-semibold tracking-[-0.02em]">
-          {title}
-        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-display text-ink text-[28px] font-semibold tracking-[-0.02em]">
+            {title}
+          </h2>
+          {action && actionPlacement === "inline" ? action : null}
+        </div>
         {note ? (
           <p className="text-muted max-w-[44rem] text-sm leading-6">{note}</p>
         ) : null}
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action && actionPlacement === "end" ? (
+        <div className="shrink-0 self-start sm:self-auto">{action}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function MapActivityIndicator({ count }: { count: number }) {
+  return (
+    <div className="text-info-text inline-flex items-baseline gap-2 text-[17px] leading-none font-semibold">
+      <MealfloIcon name="route-road" size={25} className="translate-y-[5px]" />
+      <span>{count} active</span>
     </div>
   );
 }
@@ -270,7 +287,7 @@ function SummaryStatusStrip({
           return (
             <div
               key={item.id}
-              className="flex min-w-0 items-center gap-3 py-3 first:pt-0 last:pb-0 sm:px-4 sm:py-0 sm:first:pl-0 sm:last:pr-0 xl:first:pl-0"
+              className="flex min-w-0 items-center gap-3 py-3 first:pt-0 last:pb-0 sm:px-4 sm:py-0 xl:first:pl-0 xl:last:pr-0 sm:[&:nth-child(even)]:pr-0 sm:[&:nth-child(odd)]:pl-0"
             >
               <MealfloIcon name={item.icon} size={38} />
               <div className="min-w-0">
@@ -315,247 +332,168 @@ function DashboardSummaryCard({
   );
 }
 
-function InboxRequestsTable({
-  editHrefFor,
-  selectedDraftId,
-  items,
-}: {
-  editHrefFor: (draftId: string) => string;
-  selectedDraftId?: string | null;
-  items: InboxQueueItem[];
-}) {
-  return (
-    <Table className="min-w-[860px]">
-      <TableHead>
-        <TableRow>
-          <TableHeaderCell className="w-[16%] py-2.5">Source</TableHeaderCell>
-          <TableHeaderCell className="w-[27%] py-2.5">Request</TableHeaderCell>
-          <TableHeaderCell className="w-[29%] py-2.5">
-            Parsed details
-          </TableHeaderCell>
-          <TableHeaderCell className="w-[10%] py-2.5">
-            Confidence
-          </TableHeaderCell>
-          <TableHeaderCell className="w-[18%] py-2.5">Actions</TableHeaderCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {items.map((item) => (
-          <TableRow
-            key={item.id}
-            className={
-              item.id === selectedDraftId
-                ? "bg-[rgba(240,243,255,0.46)]"
-                : undefined
-            }
-          >
-            <TableCell className="py-2.5 align-top">
-              <div className="space-y-1">
-                <Badge
-                  size="sm"
-                  tone={item.channel === "gmail" ? "info" : "neutral"}
-                >
-                  {item.channel === "gmail" ? "Gmail" : "Form"}
-                </Badge>
-                <p className="text-muted text-xs leading-5">
-                  {item.draftType === "volunteer"
-                    ? "Volunteer"
-                    : item.draftType === "request"
-                      ? "Request"
-                      : "Other"}
-                </p>
-              </div>
-            </TableCell>
-            <TableCell className="py-2.5 align-top">
-              <div className="space-y-1">
-                <p className="text-ink font-medium">{item.sender}</p>
-                <p className="text-muted text-xs leading-5">
-                  {displayKitchenLabel(item.subject)}
-                </p>
-              </div>
-            </TableCell>
-            <TableCell className="py-2.5 align-top">
-              <div className="space-y-1">
-                <p className="text-ink font-medium">{item.address}</p>
-                <p className="text-muted line-clamp-2 text-xs leading-5">
-                  {displayKitchenLabel(item.snippet)}
-                </p>
-              </div>
-            </TableCell>
-            <TableCell className="py-2.5 align-top">
-              <div className="space-y-1">
-                <p className="font-display text-ink text-lg leading-none font-semibold">
-                  {item.confidence}
-                </p>
-                <Badge
-                  size="sm"
-                  tone={item.status === "low confidence" ? "warning" : "info"}
-                >
-                  {item.status}
-                </Badge>
-              </div>
-            </TableCell>
-            <TableCell className="py-2.5 align-top">
-              <AdminInboxRowActions
-                draftId={item.id}
-                editHref={editHrefFor(item.id)}
-              />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+function compactStatusLabel(status: TriageRequestCard["status"]) {
+  if (status === "held") {
+    return "Needs dispatch";
+  }
+
+  if (status === "approved") {
+    return "Ready";
+  }
+
+  if (status === "assigned") {
+    return "Routed";
+  }
+
+  if (status === "out_for_delivery") {
+    return "Out";
+  }
+
+  return "Done";
 }
 
-function DriverCapacityTable({ drivers }: { drivers: DriverCapacityCard[] }) {
-  return (
-    <Table>
-      <TableHead>
-        <TableRow>
-          <TableHeaderCell>Driver</TableHeaderCell>
-          <TableHeaderCell>Availability</TableHeaderCell>
-          <TableHeaderCell>Start area</TableHeaderCell>
-          <TableHeaderCell>Vehicle</TableHeaderCell>
-          <TableHeaderCell>Fit</TableHeaderCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {drivers.map((driver) => (
-          <TableRow key={driver.id}>
-            <TableCell className="text-ink font-medium">
-              {driver.name}
-            </TableCell>
-            <TableCell>
-              <Badge size="sm" tone="info">
-                {driver.availability}
-              </Badge>
-              <span className="text-muted ml-2">{driver.window}</span>
-            </TableCell>
-            <TableCell className="text-muted">{driver.startArea}</TableCell>
-            <TableCell>{driver.vehicle}</TableCell>
-            <TableCell>
-              <div className="flex min-w-[220px] flex-wrap gap-2">
-                {driver.tags.map((tag) => (
-                  <Badge
-                    key={tag}
-                    size="sm"
-                    tone={/cooler|lift/i.test(tag) ? "warning" : "neutral"}
-                  >
-                    {displayKitchenLabel(tag)}
-                  </Badge>
-                ))}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-function RoutePlansTable({ plans }: { plans: RoutePlanCard[] }) {
-  return (
-    <Table>
-      <TableHead>
-        <TableRow>
-          <TableHeaderCell>Route</TableHeaderCell>
-          <TableHeaderCell>Driver</TableHeaderCell>
-          <TableHeaderCell>Time</TableHeaderCell>
-          <TableHeaderCell>Stops</TableHeaderCell>
-          <TableHeaderCell>Inventory fit</TableHeaderCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {plans.map((plan) => (
-          <TableRow key={plan.id}>
-            <TableCell>
-              <div className="min-w-[220px] space-y-1">
-                <RouteStatusBadge status={plan.status} />
-                <p className="text-ink font-medium">{plan.name}</p>
-                <p className="text-muted text-xs leading-5">
-                  {displayKitchenLabel(plan.reason)}
-                </p>
-              </div>
-            </TableCell>
-            <TableCell>
-              <p className="text-ink font-medium">{plan.driver}</p>
-              <p className="text-muted text-xs leading-5">{plan.vehicle}</p>
-            </TableCell>
-            <TableCell>
-              <p className="font-display text-lg font-semibold">
-                {plan.totalPlannedTime}
-              </p>
-              <p className="text-muted text-xs leading-5">
-                {plan.driveTime} drive
-              </p>
-            </TableCell>
-            <TableCell>{plan.stopCount}</TableCell>
-            <TableCell>
-              <div className="flex min-w-[180px] flex-wrap gap-2">
-                <Badge size="sm" tone="success">
-                  {plan.utilization} capacity
-                </Badge>
-                {plan.warnings.map((warning) => (
-                  <Badge key={warning} size="sm" tone="warning">
-                    {displayKitchenLabel(warning)}
-                  </Badge>
-                ))}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
+const todayRouteDisplayOrder = new Map(
+  [
+    "route-victoria-core",
+    "route-esquimalt-loop",
+    "route-peninsula-run",
+    "route-oak-bay-support",
+  ].map((id, index) => [id, index] as const)
+);
 
 function RoutedPeopleTable({ requests }: { requests: TriageRequestCard[] }) {
   return (
-    <Table>
-      <TableHead>
-        <TableRow>
-          <TableHeaderCell>Name</TableHeaderCell>
-          <TableHeaderCell>Address</TableHeaderCell>
-          <TableHeaderCell>Urgency</TableHeaderCell>
-          <TableHeaderCell>Meals</TableHeaderCell>
-          <TableHeaderCell>Household</TableHeaderCell>
-          <TableHeaderCell>Status</TableHeaderCell>
-          <TableHeaderCell>Bring / watch</TableHeaderCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {requests.map((request) => (
-          <TableRow key={request.id}>
-            <TableCell className="text-ink font-medium">
-              {request.clientName}
-            </TableCell>
-            <TableCell className="text-muted">{request.address}</TableCell>
-            <TableCell className="font-medium">{request.urgency}</TableCell>
-            <TableCell>{request.mealCount}</TableCell>
-            <TableCell>{request.householdSize}</TableCell>
-            <TableCell>
-              <Badge size="sm" tone={requestStatusTone(request.status)}>
-                {request.statusLabel}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              <div className="flex min-w-[180px] flex-wrap gap-2">
-                {request.safetyNotes.length > 0 ? (
-                  request.safetyNotes.map((note) => (
+    <>
+      <div className="border-line overflow-hidden rounded-[16px] border-[1.5px] bg-white md:hidden">
+        {requests.map((request) => {
+          const urgency = urgencyValue(request.urgency);
+          const bringNotes = [
+            ...request.safetyNotes,
+            ...request.dietaryTags,
+          ].slice(0, 4);
+
+          return (
+            <div
+              key={request.id}
+              className="border-line/70 space-y-3 border-b p-4 last:border-b-0"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-ink font-medium">{request.clientName}</p>
+                  <p className="text-muted mt-0.5 text-sm leading-5">
+                    {request.address}
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full border-[1.5px] px-2 text-sm font-semibold ${urgencyTone(urgency)}`}
+                  aria-label={`Urgency ${urgency} of 10`}
+                >
+                  {urgency}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge size="sm" tone={requestStatusTone(request.status)}>
+                  {compactStatusLabel(request.status)}
+                </Badge>
+                <span className="text-muted text-sm">
+                  {request.mealCount} meals · {request.householdSize} people
+                </span>
+                {request.routeName ? (
+                  <span className="text-muted text-sm">
+                    {request.routeName}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {bringNotes.length > 0 ? (
+                  bringNotes.map((note) => (
                     <Badge key={note} size="sm" tone="warning">
                       {displayKitchenLabel(note)}
                     </Badge>
                   ))
                 ) : (
-                  <span className="text-muted text-sm">Standard meal bag</span>
+                  <span className="text-muted text-sm">Standard bag</span>
                 )}
               </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden md:block">
+        <Table className="w-full min-w-[860px]">
+          <TableHead>
+            <TableRow>
+              <TableHeaderCell className="py-2.5">Recipient</TableHeaderCell>
+              <TableHeaderCell className="py-2.5">Urgency</TableHeaderCell>
+              <TableHeaderCell className="py-2.5">Meals</TableHeaderCell>
+              <TableHeaderCell className="py-2.5">Status</TableHeaderCell>
+              <TableHeaderCell className="py-2.5">
+                Bring / watch
+              </TableHeaderCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {requests.map((request) => {
+              const urgency = urgencyValue(request.urgency);
+              const bringNotes = [
+                ...request.safetyNotes,
+                ...request.dietaryTags,
+              ].slice(0, 4);
+
+              return (
+                <TableRow key={request.id}>
+                  <TableCell className="py-2.5">
+                    <div className="min-w-[250px]">
+                      <p className="text-ink font-medium">
+                        {request.clientName}
+                      </p>
+                      <p className="text-muted truncate text-xs leading-5">
+                        {request.address}
+                        {request.routeName ? ` · ${request.routeName}` : ""}
+                      </p>
+                    </div>
+                  </TableCell>
+                  <TableCell className="py-2.5">
+                    <span
+                      className={`inline-flex h-9 min-w-9 items-center justify-center rounded-full border-[1.5px] px-2 text-sm font-semibold ${urgencyTone(urgency)}`}
+                    >
+                      {urgency}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-2.5">
+                    <p className="text-ink font-medium">
+                      {request.mealCount} meals
+                    </p>
+                    <p className="text-muted text-xs leading-5">
+                      {request.householdSize} people
+                    </p>
+                  </TableCell>
+                  <TableCell className="py-2.5">
+                    <Badge size="sm" tone={requestStatusTone(request.status)}>
+                      {compactStatusLabel(request.status)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="py-2.5">
+                    <div className="flex min-w-[260px] flex-wrap gap-1.5">
+                      {bringNotes.length > 0 ? (
+                        bringNotes.map((note) => (
+                          <Badge key={note} size="sm" tone="warning">
+                            {displayKitchenLabel(note)}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted text-sm">Standard bag</span>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }
 
@@ -577,18 +515,21 @@ export function AdminFrame({
 }
 
 export async function AdminDashboardView() {
+  await ensureSeededData();
+
   const data = await getAdminDashboardData();
   const activeDriverMarkers = data.liveMarkers.filter((marker) =>
     marker.id.startsWith("driver-")
   );
   const activeDriverCount = activeDriverMarkers.length;
+  const mapMarkers = todayDeliveryMarkers(
+    data.requestBuckets.today,
+    activeDriverMarkers
+  );
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Today's operations"
-        note="New intake, approved stops, live driver movement, and meal pressure stay visible in one pass."
-      />
+      <PageHeader title="Today's operations" />
 
       <DashboardSummaryCard items={data.dashboardKpis} />
 
@@ -596,18 +537,13 @@ export async function AdminDashboardView() {
         <section className="space-y-3">
           <DashboardSectionHeader
             title="Live map"
-            action={
-              <StatusPill
-                icon="route-road"
-                label={`${activeDriverCount} active`}
-                tone="info"
-              />
-            }
+            action={<MapActivityIndicator count={activeDriverCount} />}
           />
           <MapCanvas
             className="h-[640px]"
             initialView="greater-victoria"
-            markers={activeDriverMarkers}
+            markerStyle="dot"
+            markers={mapMarkers}
           />
         </section>
 
@@ -617,12 +553,12 @@ export async function AdminDashboardView() {
             <ReadyRequestsTable buckets={data.requestBuckets} />
             <div className="border-line/70 mt-auto flex border-t pt-3">
               <ButtonLink
-                className="h-[58px] text-lg"
+                className="h-[58px] text-lg font-semibold"
                 fullWidth
                 href="/demo/admin?view=routes"
                 size="lg"
                 variant="primary"
-                leading={<MealfloIcon name="route-road" size={34} />}
+                leading={<MealfloIcon name="route-road" size={42} />}
               >
                 View all
               </ButtonLink>
@@ -641,92 +577,19 @@ export async function AdminInboxView({
   demoMode?: boolean;
   draftId?: string | null;
 }) {
+  await ensureSeededData();
+
   const data = await getAdminInboxData(draftId);
-  const editHrefFor = (draftId: string) =>
-    demoMode
-      ? `/demo/admin?view=inbox&draft=${draftId}`
-      : `/admin/inbox?draft=${draftId}`;
-  const selectedDraftId = data.selectedItem.draftId;
+  void demoMode;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Inbox"
-        note="Review parsed requests, approve the clean ones, and keep the people directory close."
-      />
+      <PageHeader title="Inbox" />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,430px)]">
-        <section className="min-w-0 space-y-3">
-          <DashboardSectionHeader
-            title="New requests"
-            note="Source, summary, parsed destination, confidence, and actions stay visible."
-            action={
-              <Badge tone="warning">{data.inboxItems.length} waiting</Badge>
-            }
-          />
-          <InboxRequestsTable
-            editHrefFor={editHrefFor}
-            selectedDraftId={selectedDraftId}
-            items={data.inboxItems}
-          />
-        </section>
-
-        <section className="min-w-0 space-y-3">
-          <DashboardSectionHeader
-            title="Review details"
-            note="Use edit from the queue to choose a draft."
-          />
-          <div className="border-line min-w-0 overflow-hidden rounded-[16px] border-[1.5px] bg-white p-4">
-            {selectedDraftId ? (
-              <div className="mb-4 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="text-ink font-medium">
-                      {data.selectedItem.sender}
-                    </p>
-                    <p className="text-muted text-sm leading-5">
-                      {data.selectedItem.subject}
-                    </p>
-                  </div>
-                  <Badge
-                    size="sm"
-                    tone={
-                      data.selectedItem.parserConfidence.startsWith("9") ||
-                      data.selectedItem.parserConfidence === "100%"
-                        ? "success"
-                        : "warning"
-                    }
-                  >
-                    {data.selectedItem.parserConfidence}
-                  </Badge>
-                </div>
-                <div className="border-line bg-surface-tint rounded-[12px] border-[1.5px] p-3">
-                  <p className="text-muted text-xs font-semibold tracking-[0.08em] uppercase">
-                    Source text
-                  </p>
-                  <p className="text-ink mt-1 text-sm leading-6">
-                    {displayKitchenLabel(
-                      data.selectedItem.rawParagraphs[0] ??
-                        data.selectedItem.summary
-                    )}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-            <AdminInboxReview
-              key={data.selectedItem.draftId ?? "empty"}
-              inboxFields={data.inboxFields}
-              selectedItem={data.selectedItem}
-            />
-          </div>
-        </section>
-      </div>
+      <AdminInboxWorkbench initialData={data} />
 
       <section className="space-y-3">
-        <DashboardSectionHeader
-          title="Clients and drivers"
-          note="Filter the active directory without leaving the inbox."
-        />
+        <DashboardSectionHeader title="Clients and drivers" />
         <AdminDirectoryTable rows={data.directoryRows} />
       </section>
     </div>
@@ -734,6 +597,8 @@ export async function AdminInboxView({
 }
 
 export async function AdminRoutesView() {
+  await ensureSeededData();
+
   const data = await getAdminRoutesData();
   const laterRequests = [
     ...data.requestBuckets.tomorrow,
@@ -755,11 +620,28 @@ export async function AdminRoutesView() {
     plannedRouteCountsByBucket[plan.serviceBucket] += 1;
   }
 
+  const todayRouteNames = new Set(
+    data.requestBuckets.today
+      .map((request) => request.routeName)
+      .filter(Boolean)
+  );
+  const todayRouteOptions = data.routeOptions
+    .filter((route) => todayRouteNames.has(route.name))
+    .sort(
+      (left, right) =>
+        (todayRouteDisplayOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+          (todayRouteDisplayOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER) ||
+        left.name.localeCompare(right.name)
+    );
+  const todayRouteMinutes = todayRouteOptions.reduce(
+    (sum, route) => sum + route.plannedTotalMinutes,
+    0
+  );
   const timeNeededRows = [
     {
       label: "Today",
-      minutes: plannedMinutesByBucket.today,
-      routeCount: plannedRouteCountsByBucket.today,
+      minutes: todayRouteMinutes,
+      routeCount: todayRouteOptions.length,
     },
     {
       label: "Tomorrow",
@@ -775,33 +657,26 @@ export async function AdminRoutesView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Plan routes"
-        note="Driver availability and route length sit above the request tables so assignment stays practical."
-        actions={<AdminRouteActions selectedRouteId={data.selectedRoute.id} />}
-      />
+      <PageHeader title="Routes" />
 
-      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
         <section className="space-y-3">
-          <DashboardSectionHeader
-            title="Estimated route hours"
-            note="Plan route length before assigning drivers."
-          />
+          <DashboardSectionHeader title="Estimated route hours" />
           <Card className="overflow-hidden p-0">
             <div className="divide-line/70 divide-y">
               {timeNeededRows.map((row) => (
                 <div
                   key={row.label}
-                  className="grid gap-2 px-5 py-5 sm:grid-cols-[1fr_auto] sm:items-center xl:grid-cols-1 xl:items-start"
+                  className="grid gap-2 px-3 py-3 sm:grid-cols-[1fr_auto] sm:items-center xl:grid-cols-1 xl:items-start"
                 >
                   <p className="font-display text-ink text-[22px] leading-none font-semibold tracking-[-0.01em]">
                     {row.label}
                   </p>
-                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 sm:justify-end xl:justify-start">
+                  <div className="grid gap-1 sm:justify-items-end xl:justify-items-start">
                     <p className="font-display text-ink text-[34px] leading-none font-bold tracking-[-0.02em]">
                       {formatAdminMinutes(row.minutes)}
                     </p>
-                    <p className="text-muted text-sm font-medium">
+                    <p className="text-muted text-base leading-none font-semibold">
                       {row.routeCount}{" "}
                       {row.routeCount === 1 ? "route" : "routes"}
                     </p>
@@ -814,17 +689,18 @@ export async function AdminRoutesView() {
 
         <section className="min-w-0 space-y-3">
           <DashboardSectionHeader
-            title="Driver availability"
-            note="Use availability length, starting area, and vehicle fit before assigning route length."
+            actionPlacement="inline"
+            title="Today's routes"
+            action={<Badge tone="info">{todayRouteOptions.length}</Badge>}
           />
-          <DriverCapacityTable drivers={data.driverCapacity} />
+          <TodayRouteList routes={todayRouteOptions} />
         </section>
       </div>
 
       <section className="space-y-3">
         <DashboardSectionHeader
+          actionPlacement="inline"
           title="Today's deliveries"
-          note="Today stays first and compact."
           action={
             <Badge tone="warning">{data.requestBuckets.today.length}</Badge>
           }
@@ -834,97 +710,19 @@ export async function AdminRoutesView() {
 
       <section className="space-y-3">
         <DashboardSectionHeader
+          actionPlacement="inline"
           title="Later deliveries"
-          note="Tomorrow and later stay below today's work."
           action={<Badge tone="info">{laterRequests.length}</Badge>}
         />
         <RoutedPeopleTable requests={laterRequests} />
-      </section>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(520px,1.1fr)]">
-        <section className="space-y-3">
-          <DashboardSectionHeader
-            title="Route map"
-            note="The selected route uses the same detailed street map as the dashboard."
-          />
-          <MapCanvas
-            className="h-[420px]"
-            initialView="greater-victoria"
-            markers={data.liveMarkers}
-            path={data.routeLine}
-          />
-        </section>
-
-        <section className="min-w-0 space-y-3">
-          <DashboardSectionHeader
-            title="Route options"
-            note="Inventory and timing stay visible before a driver is assigned."
-          />
-          <RoutePlansTable plans={data.routePlans} />
-        </section>
-      </div>
-
-      <section className="space-y-3">
-        <DashboardSectionHeader
-          title="Bring from inventory"
-          note="Driver loadout is named per stop so the food handoff is clear."
-        />
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableHeaderCell>Stop</TableHeaderCell>
-              <TableHeaderCell>Address</TableHeaderCell>
-              <TableHeaderCell>Bring from inventory</TableHeaderCell>
-              <TableHeaderCell>Status</TableHeaderCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {data.stopRows.map((stop) => (
-              <TableRow key={stop.id}>
-                <TableCell className="text-ink font-medium">
-                  {stop.name}
-                </TableCell>
-                <TableCell className="text-muted">{stop.address}</TableCell>
-                <TableCell>
-                  <div className="min-w-[240px] space-y-2">
-                    <p>{displayKitchenLabel(stop.items)}</p>
-                    {stop.warnings.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {stop.warnings.map((warning) => (
-                          <Badge
-                            key={warning}
-                            size="sm"
-                            tone={
-                              /refrigeration|fridge|allergy/i.test(warning)
-                                ? "warning"
-                                : "neutral"
-                            }
-                          >
-                            {displayKitchenLabel(warning)}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    size="sm"
-                    tone={stop.status === "Now" ? "warning" : "info"}
-                  >
-                    {stop.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
       </section>
     </div>
   );
 }
 
 export async function AdminInventoryView() {
+  await ensureSeededData();
+
   const data = await getAdminInventoryData();
   const inventorySummaryItems = data.inventoryKpis.map((item) => {
     if (item.id === "route-ready-meals") {
@@ -1044,7 +842,7 @@ export async function AdminInventoryView() {
                 <TableHeaderCell>Quantity</TableHeaderCell>
                 <TableHeaderCell>Storage</TableHeaderCell>
                 <TableHeaderCell>Source</TableHeaderCell>
-                <TableHeaderCell>Confidence</TableHeaderCell>
+                <TableHeaderCell>Sort</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1080,7 +878,7 @@ export async function AdminInventoryView() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted">{item.source}</TableCell>
-                  <TableCell>{item.suggestionConfidence}</TableCell>
+                  <TableCell className="text-muted">Suggested</TableCell>
                 </TableRow>
               ))}
             </TableBody>

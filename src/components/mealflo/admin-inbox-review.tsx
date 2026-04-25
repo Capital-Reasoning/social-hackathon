@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Badge } from "@/components/mealflo/badge";
 import { Button } from "@/components/mealflo/button";
 import { Field, Input, Select, Textarea } from "@/components/mealflo/field";
 import { InsetCard } from "@/components/mealflo/card";
@@ -11,7 +10,7 @@ import { InsetCard } from "@/components/mealflo/card";
 import type { AdminInboxData } from "@/server/mealflo/backend";
 
 type InboxReviewProps = {
-  inboxFields: AdminInboxData["inboxFields"];
+  primaryActionLabel?: string;
   selectedItem: AdminInboxData["selectedItem"];
 };
 
@@ -65,7 +64,7 @@ async function parseResponse(response: Response) {
 }
 
 export function AdminInboxReview({
-  inboxFields,
+  primaryActionLabel,
   selectedItem,
 }: InboxReviewProps) {
   const router = useRouter();
@@ -83,13 +82,21 @@ export function AdminInboxReview({
   const [availability, setAvailability] = useState(
     String(asNumber(payload.minutesAvailable, 60))
   );
+  const [windowStart, setWindowStart] = useState(
+    asText(payload.windowStart, "09:00")
+  );
+  const [windowEnd, setWindowEnd] = useState(
+    asText(payload.windowEnd, "13:00")
+  );
   const [startArea, setStartArea] = useState(selectedItem.volunteerStartArea);
   const [vehicleAccess, setVehicleAccess] = useState(
     asBoolean(payload.hasVehicleAccess) ? "yes" : "no"
   );
-  const lowConfidence = useMemo(
-    () => new Set(selectedItem.lowConfidenceFields),
-    [selectedItem.lowConfidenceFields]
+  const [canBringCooler, setCanBringCooler] = useState(
+    asBoolean(payload.canHandleColdChain) ? "yes" : "no"
+  );
+  const [canClimbStairs, setCanClimbStairs] = useState(
+    asBoolean(payload.canClimbStairs) ? "yes" : "no"
   );
 
   function requestPayload() {
@@ -123,8 +130,8 @@ export function AdminInboxReview({
     return {
       ...payload,
       ...contactPatch(contact),
-      canClimbStairs: asBoolean(payload.canClimbStairs),
-      canHandleColdChain: asBoolean(payload.canHandleColdChain),
+      canClimbStairs: canClimbStairs === "yes",
+      canHandleColdChain: canBringCooler === "yes",
       firstName: asText(payload.firstName, "Unknown"),
       hasVehicleAccess: vehicleAccess === "yes",
       homeArea: homeArea || asText(payload.homeArea, "Victoria"),
@@ -133,8 +140,8 @@ export function AdminInboxReview({
       lastName: asText(payload.lastName, "Volunteer"),
       message: notes || "Volunteer notes pending review.",
       minutesAvailable: Number.parseInt(availability, 10) || 60,
-      windowEnd: asText(payload.windowEnd, "13:00"),
-      windowStart: asText(payload.windowStart, "09:00"),
+      windowEnd,
+      windowStart,
     };
   }
 
@@ -158,30 +165,6 @@ export function AdminInboxReview({
         method: "PATCH",
       })
     );
-  }
-
-  async function handleSave() {
-    setIsSubmitting(true);
-    setState(null);
-
-    try {
-      await saveDraft();
-      setState({
-        message: "The draft has been saved for coordinator review.",
-        status: "success",
-      });
-      router.refresh();
-    } catch (error) {
-      setState({
-        message:
-          error instanceof Error
-            ? error.message
-            : "The draft could not be saved.",
-        status: "error",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
   }
 
   async function handleApprove() {
@@ -252,41 +235,6 @@ export function AdminInboxReview({
     }
   }
 
-  async function handleMarkOther() {
-    if (!selectedItem.draftId) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    setState(null);
-
-    try {
-      await parseResponse(
-        await fetch(
-          `/api/drafts/${encodeURIComponent(selectedItem.draftId)}/other`,
-          {
-            method: "POST",
-          }
-        )
-      );
-      setState({
-        message: "The draft has been marked for manual intake triage.",
-        status: "success",
-      });
-      router.refresh();
-    } catch (error) {
-      setState({
-        message:
-          error instanceof Error
-            ? error.message
-            : "The draft could not be marked as other.",
-        status: "error",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
   if (!selectedItem.draftId) {
     return (
       <InsetCard className="space-y-2">
@@ -304,13 +252,7 @@ export function AdminInboxReview({
     <div className="grid gap-4">
       {selectedItem.draftType === "request" ? (
         <>
-          <Field
-            label="Address"
-            hint={
-              lowConfidence.has("addressLine1") ? "Low confidence" : undefined
-            }
-            htmlFor="draft-address"
-          >
+          <Field label="Address" htmlFor="draft-address">
             <Input
               id="draft-address"
               value={address}
@@ -324,11 +266,7 @@ export function AdminInboxReview({
               onChange={(event) => setContact(event.target.value)}
             />
           </Field>
-          <Field
-            label="Need by"
-            hint={lowConfidence.has("dueBucket") ? "Low confidence" : undefined}
-            htmlFor="need-by"
-          >
+          <Field label="Need by" htmlFor="need-by">
             <Select
               id="need-by"
               value={needBy}
@@ -339,13 +277,7 @@ export function AdminInboxReview({
               <option value="later">later</option>
             </Select>
           </Field>
-          <Field
-            label="Household size"
-            hint={
-              lowConfidence.has("householdSize") ? "Low confidence" : undefined
-            }
-            htmlFor="household-size"
-          >
+          <Field label="Household size" htmlFor="household-size">
             <Input
               id="household-size"
               value={householdSize}
@@ -371,15 +303,7 @@ export function AdminInboxReview({
               onChange={(event) => setContact(event.target.value)}
             />
           </Field>
-          <Field
-            label="Availability"
-            hint={
-              lowConfidence.has("minutesAvailable")
-                ? "Low confidence"
-                : undefined
-            }
-            htmlFor="volunteer-availability"
-          >
+          <Field label="Availability" htmlFor="volunteer-availability">
             <Select
               id="volunteer-availability"
               value={availability}
@@ -389,13 +313,27 @@ export function AdminInboxReview({
               <option value="45">45 minutes</option>
               <option value="60">60 minutes</option>
               <option value="90">90 minutes</option>
+              <option value="120">120 minutes</option>
+              <option value="180">180 minutes</option>
             </Select>
           </Field>
-          <Field
-            label="Starting area"
-            hint={lowConfidence.has("homeArea") ? "Low confidence" : undefined}
-            htmlFor="volunteer-start-area"
-          >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Window start" htmlFor="volunteer-window-start">
+              <Input
+                id="volunteer-window-start"
+                value={windowStart}
+                onChange={(event) => setWindowStart(event.target.value)}
+              />
+            </Field>
+            <Field label="Window end" htmlFor="volunteer-window-end">
+              <Input
+                id="volunteer-window-end"
+                value={windowEnd}
+                onChange={(event) => setWindowEnd(event.target.value)}
+              />
+            </Field>
+          </div>
+          <Field label="Starting area" htmlFor="volunteer-start-area">
             <Input
               id="volunteer-start-area"
               value={startArea}
@@ -410,6 +348,26 @@ export function AdminInboxReview({
             >
               <option value="yes">Yes</option>
               <option value="no">No</option>
+            </Select>
+          </Field>
+          <Field label="Can bring a cooler?" htmlFor="volunteer-cooler">
+            <Select
+              id="volunteer-cooler"
+              value={canBringCooler}
+              onChange={(event) => setCanBringCooler(event.target.value)}
+            >
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </Select>
+          </Field>
+          <Field label="Stairs" htmlFor="volunteer-stairs">
+            <Select
+              id="volunteer-stairs"
+              value={canClimbStairs}
+              onChange={(event) => setCanClimbStairs(event.target.value)}
+            >
+              <option value="yes">Comfortable</option>
+              <option value="no">Avoid stairs</option>
             </Select>
           </Field>
         </>
@@ -428,7 +386,6 @@ export function AdminInboxReview({
             ? "Route notes"
             : "Access notes"
         }
-        hint={lowConfidence.has("message") ? "Low confidence" : undefined}
         htmlFor="draft-notes"
       >
         <Textarea
@@ -437,29 +394,6 @@ export function AdminInboxReview({
           onChange={(event) => setNotes(event.target.value)}
         />
       </Field>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {inboxFields.map((field) => (
-          <InsetCard key={field.label} className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-muted text-sm font-medium">{field.label}</p>
-              <Badge
-                size="sm"
-                tone={
-                  field.confidence === "high"
-                    ? "success"
-                    : field.confidence === "medium"
-                      ? "info"
-                      : "warning"
-                }
-              >
-                {field.confidence}
-              </Badge>
-            </div>
-            <p className="text-ink text-sm leading-6">{field.value}</p>
-          </InsetCard>
-        ))}
-      </div>
 
       {state ? (
         <InsetCard
@@ -481,27 +415,10 @@ export function AdminInboxReview({
           variant="primary"
           onClick={handleApprove}
         >
-          {selectedItem.draftType === "volunteer"
-            ? "Approve volunteer"
-            : "Approve request"}
-        </Button>
-        <Button
-          fullWidth
-          disabled={isSubmitting || selectedItem.draftType === "other"}
-          type="button"
-          variant="secondary"
-          onClick={handleSave}
-        >
-          Save draft
-        </Button>
-        <Button
-          fullWidth
-          disabled={isSubmitting || selectedItem.draftType === "other"}
-          type="button"
-          variant="quiet"
-          onClick={handleMarkOther}
-        >
-          Mark other
+          {primaryActionLabel ??
+            (selectedItem.draftType === "volunteer"
+              ? "Approve volunteer"
+              : "Approve request")}
         </Button>
         <Button
           fullWidth
