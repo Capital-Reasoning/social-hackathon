@@ -72,7 +72,7 @@
         break-after: page;
         background:
           linear-gradient(180deg, rgba(255, 253, 240, 0.18), rgba(255, 253, 240, 0.34)),
-          url("assets/mealflo-abstract-bg.png") center / cover no-repeat,
+          url("assets/mealflo-abstract-bg.jpg") center / cover no-repeat,
           var(--bg);
         padding: 42px 48px 32px;
       }
@@ -119,21 +119,18 @@
         border: 1.5px solid var(--border);
         border-radius: 24px;
         background: var(--glass);
-        box-shadow: var(--lift);
       }
 
       .tint-panel {
         border: 1.5px solid var(--border);
         border-radius: 24px;
         background: var(--warm-glass);
-        box-shadow: var(--lift);
       }
 
       .blue-panel {
         border: 1.5px solid var(--border);
         border-radius: 24px;
         background: var(--blue-glass);
-        box-shadow: var(--lift);
       }
 
       .section-label {
@@ -220,12 +217,9 @@
 
       .hero {
         position: relative;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 420px;
-        gap: 26px;
-        align-items: center;
+        display: block;
         margin-top: 0;
-        padding: 30px 36px;
+        padding: 36px 36px 40px;
       }
 
       .hero::before,
@@ -253,55 +247,10 @@
       }
 
       .hero-copy p {
-        max-width: 640px;
+        max-width: 700px;
         color: var(--muted);
         font-size: 15px;
         line-height: 1.28;
-      }
-
-      .metrics-strip {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        border: 0;
-        border-radius: 0;
-        overflow: hidden;
-        background: transparent;
-      }
-
-      .metric {
-        min-height: 70px;
-        display: grid;
-        grid-template-columns: 54px 1fr;
-        gap: 12px;
-        align-items: center;
-        padding: 8px 12px;
-        border-right: 1.5px solid var(--border);
-        border-bottom: 1.5px solid var(--border);
-      }
-
-      .metric:nth-child(2),
-      .metric:nth-child(4) {
-        border-right: 0;
-      }
-
-      .metric:nth-child(3),
-      .metric:nth-child(4) {
-        border-bottom: 0;
-      }
-
-      .metric-value {
-        display: block;
-        color: var(--navy);
-        font-size: 20px;
-        font-weight: 600;
-        line-height: 1;
-      }
-
-      .metric-label {
-        display: block;
-        margin-top: 7px;
-        color: var(--muted);
-        font-size: 12px;
       }
 
       .story-surface {
@@ -367,13 +316,13 @@
         content: "";
         position: absolute;
         top: 50%;
-        right: -8px;
+        right: -6px;
         z-index: 2;
-        width: 16px;
-        height: 16px;
-        border-top: 1.5px solid var(--border-strong);
-        border-right: 1.5px solid var(--border-strong);
-        background: rgba(255, 253, 240, 0.7);
+        width: 12px;
+        height: 12px;
+        border-top: 1.5px solid rgba(24, 24, 60, 0.18);
+        border-right: 1.5px solid rgba(24, 24, 60, 0.18);
+        background: transparent;
         transform: translateY(-50%) rotate(45deg);
       }
 
@@ -414,7 +363,6 @@
         border: 1.5px solid var(--border);
         border-radius: 24px;
         background: var(--glass);
-        box-shadow: var(--lift);
         overflow: hidden;
       }
 
@@ -477,7 +425,7 @@
 
       .ops-panel {
         display: grid;
-        grid-template-rows: 148px 1fr;
+        grid-template-rows: 158px 1fr;
         border: 0;
         border-left: 1.5px solid var(--border);
         border-radius: 0;
@@ -500,13 +448,21 @@
         font-size: 18px;
       }
 
+      .ops-map h3 {
+        max-width: 210px;
+        font-size: 16.6px;
+        line-height: 1.15;
+      }
+
       .map-visual {
         position: relative;
-        height: 58px;
+        height: 60px;
         margin-top: 10px;
         overflow: hidden;
-        border-radius: 18px;
-        background: var(--blue-soft);
+        border-radius: 16px;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.5), rgba(220, 227, 254, 0.56)),
+          var(--blue-soft);
       }
 
       .map-visual svg {
@@ -516,14 +472,12 @@
       }
 
       .map-note {
-        position: absolute;
-        left: 14px;
-        right: 14px;
-        bottom: 10px;
+        position: static;
         display: flex;
         justify-content: space-between;
+        margin-top: 7px;
         color: var(--muted);
-        font-size: 10px;
+        font-size: 9.8px;
       }
 
       table {
@@ -717,31 +671,13 @@
             <h1>Mealflo Hackathon Writeup</h1>
             <p>A working coordination app for turning intake, inventory, volunteer availability, and delivery constraints into safer food support routes.</p>
           </div>
-          <div class="metrics-strip" aria-label="Operations snapshot">
-            <div class="metric">
-              <span class="icon-bubble"><img src="../../design/assets/icons/checklist.png" alt="" /></span>
-              <span><span class="metric-value">4 items</span><span class="metric-label">Waiting for review</span></span>
-            </div>
-            <div class="metric">
-              <span class="icon-bubble"><img src="../../design/assets/icons/grocery-bag.png" alt="" /></span>
-              <span><span class="metric-value">23 requests</span><span class="metric-label">Ready today</span></span>
-            </div>
-            <div class="metric">
-              <span class="icon-bubble"><img src="../../design/assets/icons/route-road.png" alt="" /></span>
-              <span><span class="metric-value">5 routes</span><span class="metric-label">Ready to assign</span></span>
-            </div>
-            <div class="metric">
-              <span class="icon-bubble"><img src="../../design/assets/icons/meal-container.png" alt="" /></span>
-              <span><span class="metric-value">100 meals</span><span class="metric-label">Ready for delivery</span></span>
-            </div>
-          </div>
         </section>
 
         <section class="story-surface panel">
           <div class="split-panel">
             <article class="split-section">
               <div class="section-head">
-                <span class="icon-bubble blue"><img src="../../design/assets/icons/warning-alert.png" alt="" /></span>
+                <span class="icon-bubble blue"><img src="assets/icons/warning-alert.webp" alt="" /></span>
                 <div>
                   <div class="section-label">Problem</div>
                   <h3>Track chosen and problem tackled</h3>
@@ -752,7 +688,7 @@
             </article>
             <article class="split-section">
               <div class="section-head">
-                <span class="icon-bubble"><img src="../../design/assets/icons/checkmark-circle.png" alt="" /></span>
+                <span class="icon-bubble"><img src="assets/icons/checkmark-circle.webp" alt="" /></span>
                 <div>
                   <div class="section-label">Working web app</div>
                   <h3>What we built</h3>
@@ -765,21 +701,21 @@
           <div class="lanes">
             <article class="lane">
               <div class="lane-title">
-                <span class="icon-bubble"><img src="../../design/assets/icons/person-plus.png" alt="" /></span>
+                <span class="icon-bubble"><img src="assets/icons/person-plus.webp" alt="" /></span>
                 <h3>Public intake</h3>
               </div>
               <p>Clients request food support and volunteers sign up to deliver meals. The system captures address, meal count, timing, dietary needs, allergies, availability, vehicle access, cooler capacity, and mobility constraints.</p>
             </article>
             <article class="lane">
               <div class="lane-title">
-                <span class="icon-bubble"><img src="../../design/assets/icons/grocery-bag.png" alt="" /></span>
+                <span class="icon-bubble"><img src="assets/icons/grocery-bag.webp" alt="" /></span>
                 <h3>Admin operations dashboard</h3>
               </div>
               <p>Coordinators review incoming requests, manage client records, view inventory, create routes, assign drivers, and track progress from one operational picture of what needs to happen today.</p>
             </article>
             <article class="lane">
               <div class="lane-title">
-                <span class="icon-bubble"><img src="../../design/assets/icons/phone-handset.png" alt="" /></span>
+                <span class="icon-bubble"><img src="assets/icons/phone-handset.webp" alt="" /></span>
                 <h3>Volunteer driver view</h3>
               </div>
               <p>Drivers use a phone-friendly interface to see assigned routes, follow directions one stop at a time, view delivery notes, notify clients, and mark deliveries complete.</p>
@@ -805,37 +741,37 @@
               <span class="step-number">1</span>
               <h3>Review recent requests</h3>
               <p>Instead of searching through emails, forms, spreadsheets, and messages, the coordinator sees intake in one place with address, quantity, urgency, dietary needs, allergies, mobility needs, and delivery notes.</p>
-              <img class="step-icon" src="../../design/assets/icons/checklist.png" alt="" />
+              <img class="step-icon" src="assets/icons/checklist.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">2</span>
               <h3>Check available inventory</h3>
               <p>They see which meals or staples are ready for delivery. Entries can be made manually or through uploading a receipt, with meals tagged by allergens or dietary restrictions.</p>
-              <img class="step-icon" src="../../design/assets/icons/fridge.png" alt="" />
+              <img class="step-icon" src="assets/icons/fridge.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">3</span>
               <h3>Review volunteer availability</h3>
               <p>Mealflo captures driver constraints such as available time, starting location, vehicle access, cooler capacity, stair comfort, and other limitations.</p>
-              <img class="step-icon" src="../../design/assets/icons/clock.png" alt="" />
+              <img class="step-icon" src="assets/icons/clock.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">4</span>
               <h3>Review generated routes</h3>
               <p>Deliveries are grouped into routes that consider urgency, driver capacity, and food requirements. The coordinator assigns a driver and confirms meals to load.</p>
-              <img class="step-icon" src="../../design/assets/icons/route-stops.png" alt="" />
+              <img class="step-icon" src="assets/icons/route-stops.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">5</span>
               <h3>Guide the driver</h3>
               <p>The driver mobile view shows the next stop, address, meals to deliver, delivery notes, and a simple completion button.</p>
-              <img class="step-icon" src="../../design/assets/icons/phone-handset.png" alt="" />
+              <img class="step-icon" src="assets/icons/phone-handset.webp" alt="" />
             </article>
             <article class="step">
               <span class="step-number">6</span>
               <h3>Track completion</h3>
               <p>As stops are completed, the dashboard updates so the operator can see what is out for delivery, complete, and needing follow-up without calling every driver.</p>
-              <img class="step-icon" src="../../design/assets/icons/checkmark-circle.png" alt="" />
+              <img class="step-icon" src="assets/icons/checkmark-circle.webp" alt="" />
             </article>
           </div>
 
@@ -845,15 +781,15 @@
               <h3>Delivery coordination snapshot</h3>
               <div class="map-visual" aria-label="Route map illustration">
                 <svg viewBox="0 0 252 78" aria-hidden="true">
-                  <path d="M8 58 C56 8 88 67 136 34 S198 23 244 10" fill="none" stroke="#dce3fe" stroke-width="15" />
-                  <path d="M18 56 C62 20 93 58 132 39 S192 30 232 14" fill="none" stroke="#1f66b3" stroke-width="5" stroke-linecap="round" />
-                  <circle cx="46" cy="39" r="7" fill="#f0a830" />
-                  <circle cx="126" cy="42" r="7" fill="#3d5cf5" />
-                  <circle cx="157" cy="20" r="7" fill="#4ead6f" />
-                  <circle cx="210" cy="24" r="7" fill="#fae278" />
+                  <path d="M-4 58 C42 22 76 26 108 34 S162 44 208 20" fill="none" stroke="#dce3fe" stroke-width="15" />
+                  <path d="M13 58 C48 29 80 31 111 38 S165 44 224 21" fill="none" stroke="#1f66b3" stroke-width="5" stroke-linecap="round" />
+                  <circle cx="52" cy="38" r="7" fill="#f0a830" />
+                  <circle cx="126" cy="41" r="7" fill="#3d5cf5" />
+                  <circle cx="165" cy="27" r="7" fill="#4ead6f" />
+                  <circle cx="216" cy="24" r="7" fill="#fae278" />
                 </svg>
-                <div class="map-note"><span>0 active</span><span>updates as stops complete</span></div>
               </div>
+              <div class="map-note"><span>0 active</span><span>Updates as stops complete</span></div>
             </section>
             <section class="ready-table">
               <div class="section-label">Ready today</div>
@@ -876,7 +812,7 @@
 
         <section class="result-band panel">
           <div class="result-title">
-            <span class="icon-bubble"><img src="../../design/assets/icons/route-road.png" alt="" /></span>
+            <span class="icon-bubble"><img src="assets/icons/route-road.webp" alt="" /></span>
             <span>Intended result</span>
           </div>
           <p>A lower-cognitive-load operating rhythm for frontline food support: every request, constraint, route, driver update, and follow-up action is visible in one place.</p>
@@ -898,19 +834,19 @@
           <div class="release-grid">
             <article class="release-item">
               <span class="number">01</span>
-              <span class="icon-bubble"><img src="../../design/assets/icons/person-plus.png" alt="" /></span>
+              <span class="icon-bubble"><img src="assets/icons/person-plus.webp" alt="" /></span>
               <h3>Connect additional intake sources</h3>
               <p>Many food support requests do not arrive through a formal web form. They may come through Instagram, Facebook, text message, or direct messages to the organization. We would add these as intake channels so Mealflo can capture requests from the places people already use.</p>
             </article>
             <article class="release-item">
               <span class="number">02</span>
-              <span class="icon-bubble"><img src="../../design/assets/icons/phone-handset.png" alt="" /></span>
+              <span class="icon-bubble"><img src="assets/icons/phone-handset.webp" alt="" /></span>
               <h3>Add real text messaging</h3>
               <p>Drivers need simple communication tools during delivery. We would add real text messaging from the driver flow, so a driver could send a genuine SMS through the app using a pre-written message such as: "Hi, this is your meal delivery driver. I'm outside now."</p>
             </article>
             <article class="release-item">
               <span class="number">03</span>
-              <span class="icon-bubble blue"><img src="../../design/assets/icons/chat-bubble.png" alt="" /></span>
+              <span class="icon-bubble blue"><img src="assets/icons/chat-bubble.webp" alt="" /></span>
               <h3>Get field data from a real organization</h3>
               <p>Finally, we would get field data from a real organization. That would let us test Mealflo against real intake patterns, delivery constraints, volunteer workflows, and communication needs, so the next version is shaped by frontline operations rather than guided and educated assumptions.</p>
             </article>

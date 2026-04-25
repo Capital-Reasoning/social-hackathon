@@ -1,15 +1,9 @@
        TRACK 2 / FOOD SECURITY DELIVERY OPERATIONS
 
 
-       Mealflo Hackathon                                                                          4 items                              23 requests
-       Writeup
-                                                                                                  Waiting for review                   Ready today
-
-
-                                                                                                  5 routes                             100 meals
-       A working coordination app for turning intake, inventory,                                  Ready to assign                      Ready for delivery
-       volunteer availability, and delivery constraints into safer food
-       support routes.
+       Mealflo Hackathon Writeup
+       A working coordination app for turning intake, inventory, volunteer availability, and delivery
+       constraints into safer food support routes.
 
 
 
@@ -30,15 +24,18 @@
 
 
 
-               Public intake                                         Admin operations                                       Volunteer driver view
+               Public intake                                         Admin operations                                     Volunteer driver view
                                                                      dashboard
-  Clients request food support and volunteers             Coordinators review incoming requests,                 Drivers use a phone-friendly interface to see
-  sign up to deliver meals. The system captures           manage client records, view inventory, create          assigned routes, follow directions one stop at
-  address, meal count, timing, dietary needs,             routes, assign drivers, and track progress from        a time, view delivery notes, notify clients, and
-  allergies, availability, vehicle access, cooler         one operational picture of what needs to               mark deliveries complete.
+  Clients request food support and volunteers             Coordinators review incoming requests,               Drivers use a phone-friendly interface to see
+  sign up to deliver meals. The system captures           manage client records, view inventory, create        assigned routes, follow directions one stop at
+  address, meal count, timing, dietary needs,             routes, assign drivers, and track progress from      a time, view delivery notes, notify clients, and
+  allergies, availability, vehicle access, cooler         one operational picture of what needs to             mark deliveries complete.
   capacity, and mobility constraints.                     happen today.
 
-Mealflo Hackathon Writeup                                                                                                                                           1
+
+
+
+Mealflo Hackathon Writeup                                                                                                                                         1
 OPERATOR WORKFLOW
 
 
