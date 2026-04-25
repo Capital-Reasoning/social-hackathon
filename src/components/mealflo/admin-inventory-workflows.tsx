@@ -417,6 +417,7 @@ export function AdminInventoryWorkflows({
               <Input
                 id="inventory-name"
                 value={name}
+                leadingIcon={entryType === "meal" ? "meal-container" : "grocery-bag"}
                 placeholder={
                   entryType === "meal"
                     ? "Roast chicken tray"
@@ -434,6 +435,7 @@ export function AdminInventoryWorkflows({
                   placeholder="12"
                   type="number"
                   value={quantity}
+                  leadingIcon="checklist"
                   onChange={(event) => setQuantity(event.target.value)}
                 />
               </Field>
@@ -454,6 +456,7 @@ export function AdminInventoryWorkflows({
                 <Select
                   id="inventory-category"
                   value={category}
+                  leadingIcon="fork-knife"
                   onChange={(event) =>
                     setCategory(event.target.value as MealCategory | "")
                   }
@@ -471,6 +474,7 @@ export function AdminInventoryWorkflows({
                 <Select
                   id="inventory-source-type"
                   value={sourceType}
+                  leadingIcon="grocery-bag"
                   onChange={(event) =>
                     setSourceType(
                       event.target.value as IngredientSourceType | ""
@@ -492,18 +496,27 @@ export function AdminInventoryWorkflows({
                 id="inventory-source-note"
                 placeholder="Thursday produce order"
                 value={manualSourceNote}
+                leadingIcon="pencil-edit"
                 onChange={(event) => setManualSourceNote(event.target.value)}
               />
             </Field>
           </div>
 
-          <label className="border-line bg-surface-tint flex min-h-[52px] items-center gap-3 rounded-[12px] border-[1.5px] px-4">
+          <label
+            className={cn(
+              "flex min-h-[52px] cursor-pointer items-center gap-3 rounded-[12px] border-[1.5px] px-4 transition-[background-color,border-color] duration-[var(--mf-duration-base)] ease-out",
+              refrigerated
+                ? "border-[rgba(120,144,250,0.45)] bg-[var(--mf-color-blue-50)]"
+                : "border-line bg-surface-tint hover:border-line-strong"
+            )}
+          >
             <input
               checked={refrigerated}
               className="border-line checked:border-action checked:bg-action h-5 w-5 rounded-[6px] border-[1.5px] bg-white"
               type="checkbox"
               onChange={(event) => setRefrigerated(event.target.checked)}
             />
+            <MealfloIcon name="snowflake" size={20} />
             <span className="text-ink text-sm font-medium">
               Needs refrigerated handling
             </span>
@@ -614,6 +627,7 @@ export function AdminInventoryWorkflows({
                 id="receipt-document-name"
                 placeholder="Community pantry receipt"
                 value={documentName}
+                leadingIcon="pencil-edit"
                 onChange={(event) => setDocumentName(event.target.value)}
               />
             </Field>
@@ -622,36 +636,54 @@ export function AdminInventoryWorkflows({
                 id="receipt-source-note"
                 placeholder="Thursday produce order"
                 value={receiptSourceNote}
+                leadingIcon="grocery-bag"
                 onChange={(event) => setReceiptSourceNote(event.target.value)}
               />
             </Field>
           </div>
 
-          <Field
-            hint="Upload a receipt photo from phone or desktop."
-            label="Receipt image"
-            htmlFor="receipt-image"
-          >
-            <input
-              id="receipt-image"
-              accept="image/*"
-              className="mealflo-field-control border-line file:border-line file:bg-surface-tint file:text-ink hover:border-line-strong min-h-[52px] w-full rounded-[12px] border-[1.5px] bg-white px-4 py-3 text-base text-black file:mr-4 file:rounded-[10px] file:border-[1.5px] file:px-3 file:py-2 file:text-sm file:font-semibold focus:border-[rgba(120,144,250,0.45)]"
-              type="file"
-              onChange={(event) => {
-                const fileName = event.target.files?.[0]?.name ?? "";
-                setReceiptImageName(fileName);
-                setParseStatus(
-                  fileName
-                    ? `${fileName} attached. Add receipt text or use the sample receipt to parse.`
-                    : "Upload, paste, or use the sample receipt."
-                );
-              }}
-            />
-            {receiptImageName ? (
-              <span className="text-muted text-sm leading-6">
-                {receiptImageName}
+          <Field label="Receipt image" htmlFor="receipt-image">
+            <label
+              htmlFor="receipt-image"
+              className={cn(
+                "group/upload flex min-h-[88px] cursor-pointer items-center gap-4 rounded-[14px] border-[1.5px] border-dashed px-4 py-3 transition-[background-color,border-color] duration-[var(--mf-duration-base)] ease-out",
+                receiptImageName
+                  ? "border-[rgba(120,144,250,0.45)] bg-[var(--mf-color-blue-50)]"
+                  : "border-line bg-surface-tint hover:border-line-strong hover:bg-[rgba(253,248,228,0.55)]"
+              )}
+            >
+              <span className="border-line bg-white inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[1.5px]">
+                <MealfloIcon
+                  name={receiptImageName ? "checkmark-circle" : "export"}
+                  size={24}
+                />
               </span>
-            ) : null}
+              <span className="min-w-0 flex-1">
+                <span className="text-ink block text-[15px] font-semibold">
+                  {receiptImageName || "Upload receipt photo"}
+                </span>
+                <span className="text-muted block text-sm leading-5">
+                  {receiptImageName
+                    ? "Tap to replace the image."
+                    : "Drop a JPG or PNG, or browse from your device."}
+                </span>
+              </span>
+              <input
+                id="receipt-image"
+                accept="image/*"
+                className="sr-only"
+                type="file"
+                onChange={(event) => {
+                  const fileName = event.target.files?.[0]?.name ?? "";
+                  setReceiptImageName(fileName);
+                  setParseStatus(
+                    fileName
+                      ? `${fileName} attached. Add receipt text or use the sample receipt to parse.`
+                      : "Upload, paste, or use the sample receipt."
+                  );
+                }}
+              />
+            </label>
           </Field>
 
           <Field

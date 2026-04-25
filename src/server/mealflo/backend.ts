@@ -593,6 +593,7 @@ export const inventoryEntrySchema = z.object({
 
 export const inventoryParseSchema = z.object({
   documentName: z.string().min(1).default("Fixture receipt"),
+  imageDataUrl: z.string().startsWith("data:image/").optional(),
   rawText: z.string().default(""),
   sourceNote: z.string().min(2).default("Manual receipt fixture"),
 });
@@ -3020,8 +3021,100 @@ export async function parseInventoryDocument(
   rawInput: z.input<typeof inventoryParseSchema>
 ) {
   const input = inventoryParseSchema.parse(rawInput);
+  const textDraft = parseReceiptInventoryDraft(input);
 
-  return parseReceiptInventoryDraft(input);
+  if (!input.imageDataUrl || !serverEnv.hasOpenAi) {
+    return textDraft;
+  }
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      body: JSON.stringify({
+        input: [
+          {
+            content: [
+              {
+                text: [
+                  "Read this grocery or donation receipt image for a food delivery inventory team.",
+                  "Return only JSON with an items array. Each item needs quantity, name, and unit.",
+                  "Use short food names. Ignore prices, totals, taxes, dates, store addresses, and payment lines.",
+                ].join(" "),
+                type: "input_text",
+              },
+              {
+                image_url: input.imageDataUrl,
+                type: "input_image",
+              },
+            ],
+            role: "user",
+          },
+        ],
+        max_output_tokens: 700,
+        model: serverEnv.openAiIntakeModel,
+      }),
+      headers: {
+        Authorization: `Bearer ${serverEnv.openAiApiKey}`,
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI receipt read failed with ${response.status}.`);
+    }
+
+    const result = (await response.json()) as {
+      output?: Array<{
+        content?: Array<{ text?: string; type?: string }>;
+      }>;
+      output_text?: string;
+    };
+    const outputText =
+      result.output_text ??
+      result.output
+        ?.flatMap((entry) => entry.content ?? [])
+        .map((entry) => entry.text ?? "")
+        .join("\n") ??
+      "";
+    const jsonText =
+      outputText.match(/```json\s*([\s\S]*?)```/i)?.[1] ??
+      outputText.match(/\{[\s\S]*\}/)?.[0] ??
+      "";
+    const parsed = JSON.parse(jsonText) as {
+      items?: Array<{
+        name?: unknown;
+        quantity?: unknown;
+        unit?: unknown;
+      }>;
+    };
+    const imageLines = (parsed.items ?? [])
+      .map((item) => {
+        const quantity = Number.parseInt(String(item.quantity ?? ""), 10);
+        const name = String(item.name ?? "").trim();
+        const unit = String(item.unit ?? "unit").trim();
+
+        if (!Number.isFinite(quantity) || quantity <= 0 || name.length < 2) {
+          return "";
+        }
+
+        return `${quantity} ${name} ${unit}`;
+      })
+      .filter(Boolean)
+      .join("\n");
+
+    if (!imageLines) {
+      return textDraft;
+    }
+
+    return parseReceiptInventoryDraft({
+      documentName: input.documentName,
+      rawText: [input.rawText, imageLines].filter(Boolean).join("\n"),
+      sourceNote: input.sourceNote,
+    });
+  } catch (error) {
+    console.warn("Receipt image parsing fell back to text parser.", error);
+    return textDraft;
+  }
 }
 
 function buildPlannerRequests(
